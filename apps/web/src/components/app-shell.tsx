@@ -1,4 +1,4 @@
-import { Bell, LogOut } from "lucide-react"
+import { Bell, LogOut, Settings } from "lucide-react"
 import { Link, NavLink, Outlet } from "react-router"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -67,6 +67,9 @@ export function AppShell() {
           <div className="flex items-center gap-1">
             <UserMenu />
             <ThemeToggle />
+            <Button variant="ghost" size="icon" aria-label="Settings" nativeButton={false} render={<Link to="/settings" />}>
+              <Settings className="size-4" />
+            </Button>
           </div>
         </div>
       </header>

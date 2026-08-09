@@ -1,7 +1,10 @@
+import type { Config } from "../config.js";
 import type { DbClient } from "../db/client.js";
 import type { AlertRow } from "../db/schema.js";
-import type { HermesClientLike } from "../hermes/client.js";
+import { HermesClient, type HermesClientLike } from "../hermes/client.js";
 import { pollRun, PollTimeoutError } from "../hermes/outcome.js";
+import { effectiveHermesConfig, effectiveSystemPrompt } from "../settings/effective.js";
+import { getSettingsRow } from "../settings/queries.js";
 import {
   countAlertTriggers,
   markDispatchFailed,
@@ -30,6 +33,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 export interface DispatchOptions {
   dispatchTimeoutMs: number;
   pollIntervalMs: number;
+  /** Defaults to hermes/prompt.ts's RUN_INSTRUCTIONS inside HermesClient.createRun when omitted. */
+  instructions?: string;
 }
 
 /**
@@ -46,6 +51,27 @@ export function dispatch(db: DbClient, client: HermesClientLike, alertsToDispatc
   }
 }
 
+/**
+ * The entry point route handlers actually call: resolves the current
+ * effective Hermes config + system prompt (env override, else whatever's
+ * saved on the Settings page, else the built-in default — see
+ * settings/effective.ts) fresh for this dispatch, builds a HermesClient
+ * from it, and hands off to dispatch() above. Keeping dispatch() itself
+ * taking an injectable client is what keeps it directly unit-testable with
+ * a fake client, unrelated to this settings-resolution concern.
+ */
+export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alertsToDispatch: AlertRow[]): void {
+  const settings = getSettingsRow(db);
+  const hermes = effectiveHermesConfig(config, settings);
+  const client = new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
+
+  dispatch(db, client, alertsToDispatch, {
+    dispatchTimeoutMs: hermes.dispatchTimeoutMs,
+    pollIntervalMs: hermes.pollIntervalMs,
+    instructions: effectiveSystemPrompt(settings),
+  });
+}
+
 async function dispatchOne(db: DbClient, client: HermesClientLike, alert: AlertRow, opts: DispatchOptions): Promise<void> {
   if (!client.enabled()) {
     markDispatchFailed(db, alert.id, "Hermes dispatch is not configured (HERMANO_HERMES_AGENT_URL unset)");
@@ -56,7 +82,11 @@ async function dispatchOne(db: DbClient, client: HermesClientLike, alert: AlertR
 
   let runId: string;
   try {
-    runId = await withTimeout(client.createRun(alert, timesFired), CREATE_RUN_TIMEOUT_MS, "hermes: create-run timed out");
+    runId = await withTimeout(
+      client.createRun(alert, timesFired, opts.instructions),
+      CREATE_RUN_TIMEOUT_MS,
+      "hermes: create-run timed out",
+    );
   } catch (err) {
     console.error(`delegate: creating hermes run failed for ${alert.fingerprint}`, err);
     markDispatchFailed(db, alert.id, err instanceof Error ? err.message : String(err));
@@ -102,7 +132,6 @@ function recordOrWarn(
 }
 
 export interface SweeperOptions {
-  dispatchTimeoutMs: number;
   pendingGraceMs?: number;
   intervalMs?: number;
 }
@@ -112,14 +141,18 @@ export interface SweeperOptions {
  * and alerts stuck "dispatched" (past dispatchTimeout) as timed out. In
  * normal operation the dispatch worker resolves its own row directly once
  * its run finishes; this only matters as a restart-recovery net if the
- * server itself crashes/restarts mid-poll. Returns a stop function.
+ * server itself crashes/restarts mid-poll. dispatchTimeoutMs is resolved
+ * fresh (env override, else Settings-page value, else default) on every
+ * tick, so a Settings-page change is picked up within one interval, not
+ * just at boot. Returns a stop function.
  */
-export function startSweeper(db: DbClient, opts: SweeperOptions): () => void {
+export function startSweeper(db: DbClient, config: Config, opts: SweeperOptions = {}): () => void {
   const pendingGraceMs = opts.pendingGraceMs ?? PENDING_GRACE_MS;
   const intervalMs = opts.intervalMs ?? SWEEP_INTERVAL_MS;
 
   const timer = setInterval(() => {
-    const { failed, timedOut } = sweepStaleDelegations(db, pendingGraceMs, opts.dispatchTimeoutMs);
+    const dispatchTimeoutMs = effectiveHermesConfig(config, getSettingsRow(db)).dispatchTimeoutMs;
+    const { failed, timedOut } = sweepStaleDelegations(db, pendingGraceMs, dispatchTimeoutMs);
     if (failed > 0 || timedOut > 0) {
       console.info(`delegate: swept stale delegations (failed=${failed}, timed_out=${timedOut})`);
     }

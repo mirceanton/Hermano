@@ -7,6 +7,8 @@ import type {
   LabelMap,
   OverviewStats,
   Paginated,
+  SettingsResponse,
+  SettingsUpdateInput,
 } from "@hermano/shared"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -88,4 +90,16 @@ export function fetchAuthMe(): Promise<AuthMe> {
 
 export function logout(): Promise<void> {
   return request<void>("/auth/logout", { method: "POST" })
+}
+
+export function fetchSettings(): Promise<SettingsResponse> {
+  return request<SettingsResponse>("/api/settings")
+}
+
+export function updateSettings(patch: SettingsUpdateInput): Promise<SettingsResponse> {
+  return request<SettingsResponse>("/api/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  })
 }

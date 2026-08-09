@@ -18,6 +18,13 @@ describe("loadConfig", () => {
     });
     expect(config.logLevel).toBe("info");
     expect(config.staticWebDir).toBeNull();
+    expect(config.envLocks).toEqual({
+      hermesAgentUrl: false,
+      hermesAgentApiKey: false,
+      hermesDispatchTimeoutMs: false,
+      hermesPollIntervalMs: false,
+      oidc: false,
+    });
   });
 
   it("honors STATIC_WEB_DIR when set", () => {
@@ -45,6 +52,13 @@ describe("loadConfig", () => {
       pollIntervalMs: 1_000,
     });
     expect(config.logLevel).toBe("debug");
+    expect(config.envLocks).toEqual({
+      hermesAgentUrl: true,
+      hermesAgentApiKey: true,
+      hermesDispatchTimeoutMs: true,
+      hermesPollIntervalMs: true,
+      oidc: false,
+    });
   });
 
   it("derives webBaseUrl from the port", () => {
@@ -77,6 +91,7 @@ describe("loadConfig", () => {
       clientSecret: "secret",
       redirectUrl: `${config.webBaseUrl}/auth/callback`,
     });
+    expect(config.envLocks.oidc).toBe(true);
   });
 
   it("honors an explicit OIDC_REDIRECT_URL override", () => {

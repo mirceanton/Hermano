@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { createTestDb } from "../db/test-helpers.js";
 import type { DelegationStatus } from "@hermano/shared";
+import { loadConfig } from "../config.js";
 import { alerts, delegations, type AlertRow } from "../db/schema.js";
 import type { HermesClientLike, HermesRun } from "../hermes/client.js";
 import { HermesApiError } from "../hermes/client.js";
-import { dispatch, startSweeper } from "./delegate.js";
+import { updateSettingsRow } from "../settings/queries.js";
+import { dispatch, dispatchWithEffectiveConfig, startSweeper } from "./delegate.js";
 import { getLatestDelegation } from "./queries.js";
+
+const BASE_ENV = { HERMANO_DATABASE_PATH: "/data/hermano.sqlite3" };
 
 type Db = ReturnType<typeof createTestDb>;
 
@@ -145,11 +149,44 @@ describe("startSweeper", () => {
       })
       .run();
 
-    const stop = startSweeper(db, { dispatchTimeoutMs: 60_000, pendingGraceMs: 60_000, intervalMs: 20 });
+    const config = loadConfig({ ...BASE_ENV, HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS: "60000" });
+    const stop = startSweeper(db, config, { pendingGraceMs: 60_000, intervalMs: 20 });
     try {
       await waitForStatus(db, alert.id, "timed_out");
     } finally {
       stop();
+    }
+  });
+});
+
+describe("dispatchWithEffectiveConfig", () => {
+  it("dispatches against the Settings-page-configured agent URL when no env var is set", async () => {
+    const db = createTestDb();
+    const alert = createPendingAlert(db, "fp1");
+    updateSettingsRow(db, { hermesAgentUrl: "http://settings-configured.test", hermesPollIntervalMs: 10 });
+
+    const fetchSpy = vi.fn(async (url: string | URL) => {
+      const path = url.toString();
+      if (path.endsWith("/v1/runs")) {
+        return new Response(JSON.stringify({ run_id: "run-1" }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ run_id: "run-1", status: "completed", output: "done\nSTATUS: completed" }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    try {
+      const config = loadConfig(BASE_ENV);
+      dispatchWithEffectiveConfig(db, config, [alert]);
+      await waitForStatus(db, alert.id, "completed");
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://settings-configured.test/v1/runs",
+        expect.anything(),
+      );
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

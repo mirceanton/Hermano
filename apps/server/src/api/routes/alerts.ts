@@ -3,11 +3,10 @@ import type { AlertDetail, AlertListItem, Paginated } from "@hermano/shared";
 import { getAlertById, getAlertDetail, HISTORY_PAGE_SIZE, listActiveAlerts, listResolvedAlerts } from "../../alerts/queries.js";
 import type { Config } from "../../config.js";
 import type { DbClient } from "../../db/client.js";
-import { dispatch } from "../../delegate/delegate.js";
+import { dispatchWithEffectiveConfig } from "../../delegate/delegate.js";
 import { AlertNotFoundError, DelegationInFlightError, markManualDelegation } from "../../delegate/queries.js";
-import type { HermesClientLike } from "../../hermes/client.js";
 
-export function registerAlertRoutes(app: FastifyInstance, db: DbClient, config: Config, hermesClient: HermesClientLike): void {
+export function registerAlertRoutes(app: FastifyInstance, db: DbClient, config: Config): void {
   app.get<{ Querystring: { status?: string; page?: string } }>("/api/alerts", async (request): Promise<Paginated<AlertListItem>> => {
     const status = request.query.status === "resolved" ? "resolved" : "firing";
 
@@ -45,10 +44,7 @@ export function registerAlertRoutes(app: FastifyInstance, db: DbClient, config: 
 
     try {
       const delegatedAlert = markManualDelegation(db, id);
-      dispatch(db, hermesClient, [delegatedAlert], {
-        dispatchTimeoutMs: config.hermes.dispatchTimeoutMs,
-        pollIntervalMs: config.hermes.pollIntervalMs,
-      });
+      dispatchWithEffectiveConfig(db, config, [delegatedAlert]);
     } catch (err) {
       if (err instanceof AlertNotFoundError) {
         reply.code(404).send({ error: "alert not found" });

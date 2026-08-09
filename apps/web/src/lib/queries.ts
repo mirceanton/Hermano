@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { LabelMap } from "@hermano/shared"
+import type { LabelMap, SettingsUpdateInput } from "@hermano/shared"
 import {
   createRule,
   delegateAlert,
@@ -10,8 +10,10 @@ import {
   fetchDelegations,
   fetchOverview,
   fetchRules,
+  fetchSettings,
   logout,
   updateRule,
+  updateSettings,
   type AlertFilters,
   type DelegationFilters,
 } from "./api"
@@ -121,6 +123,23 @@ export function useDeleteRule() {
     mutationFn: (id: number) => deleteRule(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rules"] })
+    },
+  })
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ["settings"],
+    queryFn: fetchSettings,
+  })
+}
+
+export function useUpdateSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: SettingsUpdateInput) => updateSettings(patch),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings"], data)
     },
   })
 }

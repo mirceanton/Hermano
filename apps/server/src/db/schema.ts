@@ -131,6 +131,30 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+/**
+ * Runtime-editable overrides for the Settings page — always exactly one row
+ * (id fixed at SETTINGS_ROW_ID in settings/queries.ts). Every column here
+ * has an env-var counterpart in config.ts; when the env var is set it wins
+ * and the corresponding column here is just ignored (see settings/effective.ts).
+ */
+export const settings = sqliteTable("settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  hermesAgentUrl: text("hermes_agent_url"),
+  hermesAgentApiKey: text("hermes_agent_api_key"),
+  hermesDispatchTimeoutMs: integer("hermes_dispatch_timeout_ms"),
+  hermesPollIntervalMs: integer("hermes_poll_interval_ms"),
+  // Overrides hermes/prompt.ts's RUN_INSTRUCTIONS when set.
+  customSystemPrompt: text("custom_system_prompt"),
+  oidcIssuerUrl: text("oidc_issuer_url"),
+  oidcClientId: text("oidc_client_id"),
+  oidcClientSecret: text("oidc_client_secret"),
+  oidcRedirectUrl: text("oidc_redirect_url"),
+  // Auto-generated on first use when OIDC becomes DB-configured and no
+  // SESSION_SECRET env var is set — never exposed via the API.
+  sessionSecret: text("session_secret"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export type AlertRow = typeof alerts.$inferSelect;
 export type NewAlertRow = typeof alerts.$inferInsert;
 export type AlertTriggerRow = typeof alertTriggers.$inferSelect;
@@ -141,3 +165,5 @@ export type DelegationRow = typeof delegations.$inferSelect;
 export type NewDelegationRow = typeof delegations.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
+export type SettingsRow = typeof settings.$inferSelect;
+export type NewSettingsRow = typeof settings.$inferInsert;

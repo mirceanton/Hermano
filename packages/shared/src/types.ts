@@ -130,3 +130,46 @@ export interface WebhookIngestResult {
   updated: number;
   resolved: number;
 }
+
+/** A settings-page value alongside whether it's locked to an env var (read-only, env wins). */
+export interface LockableField<T> {
+  value: T;
+  locked: boolean;
+}
+
+export interface SettingsResponse {
+  hermes: {
+    agentUrl: LockableField<string>;
+    /** Never the actual key — just whether one is currently configured (env or DB). */
+    agentApiKeySet: boolean;
+    agentApiKeyLocked: boolean;
+    dispatchTimeoutMs: LockableField<number>;
+    pollIntervalMs: LockableField<number>;
+  };
+  systemPrompt: {
+    /** The active custom override, or "" if none is set (in which case `default` is what's actually used). */
+    value: string;
+    isCustom: boolean;
+    default: string;
+  };
+  oidc: {
+    /** Whole-integration lock: the three OIDC env vars are validated all-or-nothing, so there's no useful per-field lock. */
+    locked: boolean;
+    issuerUrl: string;
+    clientId: string;
+    clientSecretSet: boolean;
+    redirectUrl: string;
+  };
+}
+
+export interface SettingsUpdateInput {
+  hermesAgentUrl?: string | null;
+  hermesAgentApiKey?: string | null;
+  hermesDispatchTimeoutMs?: number | null;
+  hermesPollIntervalMs?: number | null;
+  customSystemPrompt?: string | null;
+  oidcIssuerUrl?: string | null;
+  oidcClientId?: string | null;
+  oidcClientSecret?: string | null;
+  oidcRedirectUrl?: string | null;
+}

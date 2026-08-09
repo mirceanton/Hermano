@@ -38,6 +38,22 @@ export interface HermesConfig {
   pollIntervalMs: number;
 }
 
+/**
+ * Which settings-page fields are locked to their env var value. A field is
+ * locked purely based on whether its own env var is *present*, independent
+ * of the app's current effective config — this is what the Settings page
+ * uses to grey a field out, and what the settings PATCH route uses to
+ * reject edits to it. OIDC is a single flag (not per-field) because
+ * loadConfig already requires its three env vars all-or-nothing.
+ */
+export interface EnvLocks {
+  hermesAgentUrl: boolean;
+  hermesAgentApiKey: boolean;
+  hermesDispatchTimeoutMs: boolean;
+  hermesPollIntervalMs: boolean;
+  oidc: boolean;
+}
+
 export type Config = {
   databasePath: string;
   port: number;
@@ -49,6 +65,7 @@ export type Config = {
   /** null means single-user mode: no auth middleware is mounted at all. */
   oidc: OidcConfig | null;
   sessionSecret: string | null;
+  envLocks: EnvLocks;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -104,5 +121,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     staticWebDir: parsed.STATIC_WEB_DIR ?? null,
     oidc,
     sessionSecret: parsed.SESSION_SECRET ?? null,
+    envLocks: {
+      hermesAgentUrl: env.HERMANO_HERMES_AGENT_URL != null,
+      hermesAgentApiKey: env.HERMANO_HERMES_AGENT_API_KEY != null,
+      hermesDispatchTimeoutMs: env.HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS != null,
+      hermesPollIntervalMs: env.HERMANO_HERMES_POLL_INTERVAL_MS != null,
+      oidc: allOidcFieldsSet,
+    },
   };
 }

@@ -79,14 +79,16 @@ export class HermesClient {
    * session/previous-response id is sent, so a delegation never inherits
    * context from a prior investigation of the same alert. timesFired is
    * looked up by the caller since this client stays database-agnostic.
+   * instructions defaults to the built-in RUN_INSTRUCTIONS but can be
+   * overridden per-call with the Settings page's custom system prompt.
    */
-  async createRun(alert: AlertRow, timesFired: number): Promise<string> {
+  async createRun(alert: AlertRow, timesFired: number, instructions: string = RUN_INSTRUCTIONS): Promise<string> {
     const res = await this.request("/v1/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         input: buildInput(alert, timesFired),
-        instructions: RUN_INSTRUCTIONS,
+        instructions,
       }),
     });
     const decoded = (await res.json()) as { run_id?: string };
