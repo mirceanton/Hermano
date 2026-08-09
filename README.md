@@ -22,35 +22,9 @@ From the dashboard you can look through active alerts or history and decide that
 
 Point Alertmanager at Hermano alone (not also at Pushover directly) and Hermano becomes the single hop in between, deciding what's actually worth interrupting you for — see [Notifying you via Pushover](#notifying-you-via-pushover) below.
 
-## Running it
-
-### Docker Compose
-
-```bash
-docker compose up -d
-```
-
-This runs the published image with a SQLite database on a named volume, exposed on `http://localhost:8080`. See `docker-compose.yml` for the full list of optional environment variables (Hermes dispatch, webhook auth, OIDC).
-
-### Locally
-
-```bash
-pnpm install
-pnpm dev:server   # Fastify API on :8080
-pnpm dev:web      # Vite dev server on :5173, proxying /api, /auth, /healthz to :8080
-```
-
-Requires at minimum `HERMANO_DATABASE_PATH` set (see `apps/server/.env.example`).
-
-### Building the container image yourself
-
-```bash
-docker build -t hermano .
-```
-
 ## Configuration
 
-All configuration is via environment variables — see `apps/server/.env.example` for the full annotated list.
+All configuration options are exposed via environment variables — see `apps/server/.env.example` for the full annotated list.
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -85,16 +59,7 @@ receivers:
         #     credentials: <the shared secret>
 ```
 
-`send_resolved: true` is important — without it, resolved alerts never get removed from the active list.
-
-## Using the dashboard
-
-- **Overview** (`/`) — a "needs attention" panel (undelegated or failed active alerts), stat tiles (open/resolved alerts, sessions dispatched, completed/failed counts, active rules, tokens used), and a live-updating grid of currently-firing alerts with a "Delegate now"/"Retry" action.
-- **Alerts** (`/alerts`) — resolved-alert history, searchable and filterable by severity, paginated.
-- **Alert detail** (`/alerts/:id`) — an alert's full identity, label set, firing/delegation timeline merged chronologically, and its complete delegation attempt history.
-- **Delegations** (`/delegations`) — a log of every delegation attempt ever made, active or resolved alert, most recent first, searchable and filterable by status, with the agent's full postmortem report always one click away.
-- **Rules** (`/rules`) — create/enable/disable/delete delegation rules. Each rule is a set of `label=value` matchers (AND'd together) with a live "would match N currently active alerts" preview as you type; an alert is delegated the moment it matches an enabled rule, including alerts that were already firing before the rule was created. "Forward this kind →" on any undelegated alert card opens the rule dialog pre-filled from that alert. Duplicate rules (same matcher set) are rejected.
-- **Settings** (`/settings`, gear icon) — edit the Hermes connection, the system prompt sent to Hermes on every dispatch, and Pushover, all at runtime. Any field already set via an environment variable renders disabled with a caption naming it.
+`send_resolved: true` is important. Without it, resolved alerts never get removed from the active list.
 
 ## Delegating to Hermes
 
