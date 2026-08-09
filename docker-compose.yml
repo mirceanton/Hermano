@@ -1,0 +1,31 @@
+services:
+  hermano:
+    build: .
+    # image: ghcr.io/mirceanton/hermano:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - hermano-data:/data
+    environment:
+      # Point Alertmanager's webhook_configs at http://<host>:8080/api/webhook
+      # (send_resolved: true). Optional shared-secret bearer check — leave
+      # unset to accept any request, since Alertmanager can't do OIDC.
+      # HERMANO_WEBHOOK_SHARED_SECRET: changeme
+
+      # Hermes' Runs API — leave HERMANO_HERMES_AGENT_URL unset to disable
+      # dispatch entirely (alerts still get tracked, never forwarded).
+      # HERMANO_HERMES_AGENT_URL: http://hermes-api.ai.svc.cluster.local:8642
+      # HERMANO_HERMES_AGENT_API_KEY: changeme
+
+      # OIDC login (Authelia, Authentik, Keycloak, etc.). Leave unset for
+      # single-user mode (no login screen). If set, all three below plus
+      # SESSION_SECRET are required — see apps/server/.env.example.
+      # OIDC_ISSUER_URL: https://auth.example.com
+      # OIDC_CLIENT_ID: hermano
+      # OIDC_CLIENT_SECRET: changeme
+      # SESSION_SECRET: changeme-32-chars-minimum
+      LOG_LEVEL: info
+    restart: unless-stopped
+
+volumes:
+  hermano-data:
