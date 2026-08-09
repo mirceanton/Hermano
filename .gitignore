@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# Local runtime data (SQLite DB, etc.) — not source.
+data/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+.env
+.playwright*

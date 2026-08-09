@@ -1,0 +1,19 @@
+{
+  "name": "hermano",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:server": "pnpm --filter @hermano/server dev",
+    "dev:web": "pnpm --filter @hermano/web dev",
+    "build": "pnpm --filter @hermano/shared build && pnpm --filter @hermano/server build && pnpm --filter @hermano/web build",
+    "test": "pnpm --filter @hermano/server test",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{yaml,yml}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  }
+}
