@@ -9,6 +9,8 @@ A small self-hosted service that receives [Alertmanager](https://prometheus.io/d
 > risk, preferably not exposed to the open internet. No warranties, no
 > support guarantees, no promises.
 
+![Overview page](.github/assets/overview.png)
+
 ## Core Principles
 
 ### Alert Deduplication
@@ -19,11 +21,15 @@ Hermano deduplicates firing alerts by their Alertmanager fingerprint. A repeated
 
 Once Alertmanager reports an alert as resolved, it's removed from the active list and a snapshot is kept in history for later reference.
 
+![Alert history](.github/assets/alerts.png)
+
 ### Delegation rules
 
 By default nothing is forwarded anywhere. The app just surfaces all of your currently firing alerts and gives you the option to manually delegate any of them. However, the better way to handle this is to create `delegation rules` based on alert labels to auto-delegate as soon as they come in.
 
 From the dashboard you can look through active alerts or history and decide that a given *kind* of alert (matched by labels, e.g. `alertname=KubePodCrashLooping`) should start being delegated to your [Hermes agent](https://github.com/NousResearch/hermes-agent) from then on. A matching alert is dispatched via Hermes' OpenAI-compatible Runs API and its outcome is tracked end-to-end (`pending` → `dispatched` → `completed`/`failed`/`timed_out`) by directly polling Hermes for the run's status — see [Delegating to Hermes](#delegating-to-hermes) below.
+
+![Delegation rules](.github/assets/rules.png)
 
 ### Selective Pushover notifications
 
@@ -50,6 +56,8 @@ All configuration options are exposed via environment variables — see `apps/se
 
 All of the above except `HERMANO_DATABASE_PATH`/`HERMANO_PORT`/`STATIC_WEB_DIR`/`LOG_LEVEL` (and `OIDC_*`, which requires a restart) are also editable from the in-app Settings page — an environment variable, when set, always takes priority over whatever's saved there.
 
+![Settings page](.github/assets/settings.png)
+
 ## Pointing Alertmanager at it
 
 Add a webhook receiver to your Alertmanager config:
@@ -72,6 +80,8 @@ receivers:
 
 Hermes exposes an [OpenAI-compatible API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server) with an async Runs API (`POST /v1/runs` to start an agentic run with its full configured toolset, `GET /v1/runs/{id}` to poll it, `POST /v1/runs/{id}/stop` to cancel it) — Hermano talks to that directly rather than firing a webhook and waiting for a callback.
 
+![Delegations page](.github/assets/delegations.png)
+
 The flow, entirely inside one background worker per delegated alert:
 
 1. A delegation rule matches an alert → its status becomes `pending`.
@@ -81,6 +91,8 @@ The flow, entirely inside one background worker per delegated alert:
 5. If the run hasn't reached a terminal state within `HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS`, Hermano stops it and marks the alert `timed_out`.
 
 Hermes' own per-run `usage` accounting (real, server-side token counts — not the agent's self-report) is stored alongside the outcome and shown as the "Tokens Used" stat on the Overview page.
+
+![Delegation detail](.github/assets/delegation-detail.png)
 
 ### Hermes-side configuration
 
