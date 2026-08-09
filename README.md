@@ -2,6 +2,13 @@
 
 A small self-hosted service that receives [Alertmanager](https://prometheus.io/docs/alerting/latest/configuration/#webhook_config) webhook notifications and delegates them to Hermes to investigate and fix based on custom rules.
 
+> [!WARNING]
+> **AI Slop / Vibe Coded Project** — This project was "built" with heavy AI
+> assistance to scratch a personal itch. The code works for my use case, but
+> it has not been hardened, audited, or battle-tested. Deploy at your own
+> risk, preferably not exposed to the open internet. No warranties, no
+> support guarantees, no promises.
+
 ## Core Principles
 
 ### Alert Deduplication
