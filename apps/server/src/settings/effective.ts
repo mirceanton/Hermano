@@ -1,4 +1,4 @@
-import type { Config, HermesConfig, OidcConfig } from "../config.js";
+import type { Config, HermesConfig, OidcConfig, PushoverConfig } from "../config.js";
 import type { SettingsRow } from "../db/schema.js";
 import { RUN_INSTRUCTIONS } from "../hermes/prompt.js";
 
@@ -19,6 +19,17 @@ export function effectiveHermesConfig(config: Config, settings: SettingsRow): He
     pollIntervalMs: locks.hermesPollIntervalMs
       ? config.hermes.pollIntervalMs
       : (settings.hermesPollIntervalMs ?? config.hermes.pollIntervalMs),
+  };
+}
+
+export function effectivePushoverConfig(config: Config, settings: SettingsRow): PushoverConfig {
+  const locks = config.envLocks;
+  return {
+    apiToken: locks.pushoverApiToken ? config.pushover.apiToken : (settings.pushoverApiToken ?? config.pushover.apiToken),
+    userKey: locks.pushoverUserKey ? config.pushover.userKey : (settings.pushoverUserKey ?? config.pushover.userKey),
+    notifyOnCompleted: locks.pushoverNotifyOnCompleted
+      ? config.pushover.notifyOnCompleted
+      : (settings.pushoverNotifyOnCompleted ?? config.pushover.notifyOnCompleted),
   };
 }
 

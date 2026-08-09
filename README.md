@@ -18,6 +18,10 @@ By default nothing is forwarded anywhere. The app just surfaces all of your curr
 
 From the dashboard you can look through active alerts or history and decide that a given *kind* of alert (matched by labels, e.g. `alertname=KubePodCrashLooping`) should start being delegated to your [Hermes agent](https://github.com/NousResearch/hermes-agent) from then on. A matching alert is dispatched via Hermes' OpenAI-compatible Runs API and its outcome is tracked end-to-end (`pending` → `dispatched` → `completed`/`failed`/`timed_out`) by directly polling Hermes for the run's status — see [Delegating to Hermes](#delegating-to-hermes) below.
 
+### Selective Pushover notifications
+
+Point Alertmanager at Hermano alone (not also at Pushover directly) and Hermano becomes the single hop in between, deciding what's actually worth interrupting you for — see [Notifying you via Pushover](#notifying-you-via-pushover) below.
+
 ## Running it
 
 ### Docker Compose
@@ -59,7 +63,11 @@ All configuration is via environment variables — see `apps/server/.env.example
 | `HERMANO_HERMES_POLL_INTERVAL_MS` | `3000` | How often to poll a dispatched run's status |
 | `STATIC_WEB_DIR` | *(unset)* | Absolute path to the built web SPA — set in production so this same process serves both the API and the frontend |
 | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URL` / `SESSION_SECRET` | *(unset = single-user mode)* | Gate the dashboard behind OIDC login (Authelia, Authentik, Keycloak, ...). If any of the first three is set, all three plus `SESSION_SECRET` (32+ chars) are required |
+| `HERMANO_PUSHOVER_API_TOKEN` / `HERMANO_PUSHOVER_USER_KEY` | *(unset = disabled)* | [Pushover](https://pushover.net) application token and user/group key. Leave both unset to disable notifications entirely |
+| `HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED` | `false` | Whether a successful fix also sends a (low-priority) Pushover notification — see [Notifying you via Pushover](#notifying-you-via-pushover) |
 | `LOG_LEVEL` | `info` | `fatal` / `error` / `warn` / `info` / `debug` / `trace` |
+
+All of the above except `HERMANO_DATABASE_PATH`/`HERMANO_PORT`/`STATIC_WEB_DIR`/`LOG_LEVEL` (and `OIDC_*`, which requires a restart) are also editable from the in-app Settings page — an environment variable, when set, always takes priority over whatever's saved there.
 
 ## Pointing Alertmanager at it
 
@@ -86,6 +94,7 @@ receivers:
 - **Alert detail** (`/alerts/:id`) — an alert's full identity, label set, firing/delegation timeline merged chronologically, and its complete delegation attempt history.
 - **Delegations** (`/delegations`) — a log of every delegation attempt ever made, active or resolved alert, most recent first, searchable and filterable by status, with the agent's full postmortem report always one click away.
 - **Rules** (`/rules`) — create/enable/disable/delete delegation rules. Each rule is a set of `label=value` matchers (AND'd together) with a live "would match N currently active alerts" preview as you type; an alert is delegated the moment it matches an enabled rule, including alerts that were already firing before the rule was created. "Forward this kind →" on any undelegated alert card opens the rule dialog pre-filled from that alert. Duplicate rules (same matcher set) are rejected.
+- **Settings** (`/settings`, gear icon) — edit the Hermes connection, the system prompt sent to Hermes on every dispatch, and Pushover, all at runtime. Any field already set via an environment variable renders disabled with a caption naming it.
 
 ## Delegating to Hermes
 
@@ -120,3 +129,13 @@ Then point Hermano at it:
 HERMANO_HERMES_AGENT_URL=http://hermes.<namespace>.svc.cluster.local:8642
 HERMANO_HERMES_AGENT_API_KEY=<the same API_SERVER_KEY>
 ```
+
+## Notifying you via Pushover
+
+If you're already pushing Alertmanager notifications straight to [Pushover](https://pushover.net), point it at Hermano instead (`HERMANO_PUSHOVER_API_TOKEN`/`HERMANO_PUSHOVER_USER_KEY`, or the Settings page) and let Hermano decide what actually deserves a push:
+
+- **An alert fires that matches no delegation rule** → pushed immediately (nobody, human or agent, is on it) — and pushed again when it **resolves**, the same as AlertManager's own direct notifications would.
+- **A delegation finishes**: `failed` or `timed_out` → always pushed, since it needs you. `completed` → only pushed if `HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED` (or the Settings-page toggle) is on — off by default, since the point of delegating is *not* getting paged for things Hermes already handled.
+- **An alert fires again after previously being marked `completed`** → always pushed, whether that's the same episode that never actually stopped firing, or a brand-new episode sometime after the alert fully resolved. Either way, the fix didn't hold.
+
+Nothing else pushes a notification — an alert currently being investigated stays quiet until one of the above happens.

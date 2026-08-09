@@ -3,6 +3,7 @@ import type { DbClient } from "../db/client.js";
 import type { AlertRow } from "../db/schema.js";
 import { HermesClient, type HermesClientLike } from "../hermes/client.js";
 import { pollRun, PollTimeoutError } from "../hermes/outcome.js";
+import { notifyDelegationOutcome } from "../pushover/notify.js";
 import { effectiveHermesConfig, effectiveSystemPrompt } from "../settings/effective.js";
 import { getSettingsRow } from "../settings/queries.js";
 import {
@@ -35,6 +36,8 @@ export interface DispatchOptions {
   pollIntervalMs: number;
   /** Defaults to hermes/prompt.ts's RUN_INSTRUCTIONS inside HermesClient.createRun when omitted. */
   instructions?: string;
+  /** Called once a terminal outcome is actually persisted (i.e. recordDelegationOutcome matched a row) — e.g. to fire a Pushover notification. Never awaited; errors are the caller's responsibility. */
+  onOutcome?: (alert: AlertRow, status: "completed" | "failed" | "timed_out", summary: string) => void;
 }
 
 /**
@@ -69,6 +72,11 @@ export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alerts
     dispatchTimeoutMs: hermes.dispatchTimeoutMs,
     pollIntervalMs: hermes.pollIntervalMs,
     instructions: effectiveSystemPrompt(settings),
+    onOutcome: (alert, status, summary) => {
+      void notifyDelegationOutcome(db, config, alert, status, summary).catch((err) => {
+        console.error(`pushover: notifying delegation outcome failed for ${alert.fingerprint}`, err);
+      });
+    },
   });
 }
 
@@ -102,18 +110,18 @@ async function dispatchOne(db: DbClient, client: HermesClientLike, alert: AlertR
       deadlineAt: Date.now() + opts.dispatchTimeoutMs,
     });
     console.info(`delegate: hermes run ${runId} finished for ${alert.fingerprint} (status=${outcome.status})`);
-    recordOrWarn(db, alert, runId, outcome.status, outcome.summary, outcome.usage);
+    recordOrWarn(db, alert, runId, outcome.status, outcome.summary, outcome.usage, opts.onOutcome);
   } catch (err) {
     if (err instanceof PollTimeoutError) {
       console.warn(`delegate: giving up on hermes run ${runId} for ${alert.fingerprint} after ${opts.dispatchTimeoutMs}ms`);
       await withTimeout(client.stopRun(runId), STOP_RUN_TIMEOUT_MS, "hermes: stop-run timed out").catch((stopErr) => {
         console.warn(`delegate: failed to stop abandoned hermes run ${runId}`, stopErr);
       });
-      recordOrWarn(db, alert, runId, "timed_out", "gave up waiting for the hermes run to finish", null);
+      recordOrWarn(db, alert, runId, "timed_out", "gave up waiting for the hermes run to finish", null, opts.onOutcome);
       return;
     }
     console.error(`delegate: polling hermes run ${runId} failed for ${alert.fingerprint}`, err);
-    recordOrWarn(db, alert, runId, "failed", err instanceof Error ? err.message : String(err), null);
+    recordOrWarn(db, alert, runId, "failed", err instanceof Error ? err.message : String(err), null, opts.onOutcome);
   }
 }
 
@@ -124,11 +132,14 @@ function recordOrWarn(
   status: "completed" | "failed" | "timed_out",
   summary: string,
   usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null,
+  onOutcome: DispatchOptions["onOutcome"],
 ): void {
   const matched = recordDelegationOutcome(db, alert.id, status, summary, usage);
   if (!matched) {
     console.warn(`delegate: no dispatched row found to resolve for ${alert.fingerprint} (run_id=${runId}, likely already swept)`);
+    return;
   }
+  onOutcome?.(alert, status, summary);
 }
 
 export interface SweeperOptions {

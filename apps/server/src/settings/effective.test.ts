@@ -3,7 +3,7 @@ import { loadConfig } from "../config.js";
 import { RUN_INSTRUCTIONS } from "../hermes/prompt.js";
 import { createTestDb } from "../db/test-helpers.js";
 import { getSettingsRow, updateSettingsRow } from "./queries.js";
-import { effectiveHermesConfig, effectiveOidcConfig, effectiveSystemPrompt } from "./effective.js";
+import { effectiveHermesConfig, effectiveOidcConfig, effectivePushoverConfig, effectiveSystemPrompt } from "./effective.js";
 
 const BASE_ENV = { HERMANO_DATABASE_PATH: "/data/hermano.sqlite3" };
 
@@ -125,5 +125,47 @@ describe("effectiveOidcConfig", () => {
     expect(effectiveOidcConfig(config, getSettingsRow(db))?.redirectUrl).toBe(
       "https://hermano.example.com/auth/callback",
     );
+  });
+});
+
+describe("effectivePushoverConfig", () => {
+  it("uses DB values when no env vars are set", () => {
+    const config = loadConfig(BASE_ENV);
+    const db = createTestDb();
+    updateSettingsRow(db, { pushoverApiToken: "db-token", pushoverUserKey: "db-user", pushoverNotifyOnCompleted: true });
+
+    expect(effectivePushoverConfig(config, getSettingsRow(db))).toEqual({
+      apiToken: "db-token",
+      userKey: "db-user",
+      notifyOnCompleted: true,
+    });
+  });
+
+  it("prefers env vars over DB values when both are set", () => {
+    const config = loadConfig({
+      ...BASE_ENV,
+      HERMANO_PUSHOVER_API_TOKEN: "env-token",
+      HERMANO_PUSHOVER_USER_KEY: "env-user",
+      HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: "false",
+    });
+    const db = createTestDb();
+    updateSettingsRow(db, { pushoverApiToken: "db-token", pushoverUserKey: "db-user", pushoverNotifyOnCompleted: true });
+
+    expect(effectivePushoverConfig(config, getSettingsRow(db))).toEqual({
+      apiToken: "env-token",
+      userKey: "env-user",
+      notifyOnCompleted: false,
+    });
+  });
+
+  it("falls back to unset/false when neither env nor DB is configured", () => {
+    const config = loadConfig(BASE_ENV);
+    const db = createTestDb();
+
+    expect(effectivePushoverConfig(config, getSettingsRow(db))).toEqual({
+      apiToken: undefined,
+      userKey: undefined,
+      notifyOnCompleted: false,
+    });
   });
 });

@@ -406,6 +406,125 @@ function OidcSection({ oidc }: { oidc: SettingsResponse["oidc"] }) {
   )
 }
 
+function PushoverSection({ pushover }: { pushover: SettingsResponse["pushover"] }) {
+  const idPrefix = useId()
+  const updateSettings = useUpdateSettings()
+
+  const [apiTokenInput, setApiTokenInput] = useState("")
+  const [clearApiToken, setClearApiToken] = useState(false)
+  const [userKeyInput, setUserKeyInput] = useState("")
+  const [clearUserKey, setClearUserKey] = useState(false)
+  const [notifyOnCompleted, setNotifyOnCompleted] = useState(pushover.notifyOnCompleted.value)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setApiTokenInput("")
+    setClearApiToken(false)
+    setUserKeyInput("")
+    setClearUserKey(false)
+    setNotifyOnCompleted(pushover.notifyOnCompleted.value)
+  }, [pushover.notifyOnCompleted.value])
+
+  function markDirty() {
+    setSaved(false)
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    updateSettings.mutate(
+      {
+        ...(!pushover.apiTokenLocked && clearApiToken && { pushoverApiToken: null }),
+        ...(!pushover.apiTokenLocked && !clearApiToken && apiTokenInput && { pushoverApiToken: apiTokenInput }),
+        ...(!pushover.userKeyLocked && clearUserKey && { pushoverUserKey: null }),
+        ...(!pushover.userKeyLocked && !clearUserKey && userKeyInput && { pushoverUserKey: userKeyInput }),
+        ...(!pushover.notifyOnCompleted.locked && { pushoverNotifyOnCompleted: notifyOnCompleted }),
+      },
+      { onSuccess: () => setSaved(true) },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Pushover</CardTitle>
+        <CardDescription>
+          Notify you when an alert matches no delegation rule (nobody's watching it), when Hermes fails or times out trying to fix
+          one, or when an alert fires again after previously being marked fixed. Leave both fields empty to disable Pushover entirely.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <SecretField
+            id={`${idPrefix}-token`}
+            label="API Token"
+            isSet={pushover.apiTokenSet}
+            locked={pushover.apiTokenLocked}
+            envVar="HERMANO_PUSHOVER_API_TOKEN"
+            value={apiTokenInput}
+            clearing={clearApiToken}
+            onChange={(v) => {
+              setApiTokenInput(v)
+              setClearApiToken(false)
+              markDirty()
+            }}
+            onClear={() => {
+              setClearApiToken(true)
+              setApiTokenInput("")
+              markDirty()
+            }}
+          />
+
+          <SecretField
+            id={`${idPrefix}-user`}
+            label="User Key"
+            isSet={pushover.userKeySet}
+            locked={pushover.userKeyLocked}
+            envVar="HERMANO_PUSHOVER_USER_KEY"
+            value={userKeyInput}
+            clearing={clearUserKey}
+            onChange={(v) => {
+              setUserKeyInput(v)
+              setClearUserKey(false)
+              markDirty()
+            }}
+            onClear={() => {
+              setClearUserKey(true)
+              setUserKeyInput("")
+              markDirty()
+            }}
+          />
+
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={notifyOnCompleted}
+                disabled={pushover.notifyOnCompleted.locked}
+                onChange={(e) => {
+                  setNotifyOnCompleted(e.target.checked)
+                  markDirty()
+                }}
+                className="size-4 rounded border-input"
+              />
+              Notify me when Hermes successfully fixes an alert
+            </label>
+            {pushover.notifyOnCompleted.locked && <EnvCaption envVar="HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED" />}
+          </div>
+
+          {updateSettings.isError && <p className="text-sm text-destructive">{updateSettings.error.message}</p>}
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={updateSettings.isPending}>
+              Save
+            </Button>
+            <SavedNote show={saved} />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function SettingsPage() {
   const { data: settings, isPending } = useSettings()
 
@@ -425,6 +544,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-6">
           <HermesSection hermes={settings.hermes} />
           <PromptSection systemPrompt={settings.systemPrompt} />
+          <PushoverSection pushover={settings.pushover} />
           <OidcSection oidc={settings.oidc} />
         </div>
       )}

@@ -160,6 +160,13 @@ export interface SettingsResponse {
     clientSecretSet: boolean;
     redirectUrl: string;
   };
+  pushover: {
+    apiTokenSet: boolean;
+    apiTokenLocked: boolean;
+    userKeySet: boolean;
+    userKeyLocked: boolean;
+    notifyOnCompleted: LockableField<boolean>;
+  };
 }
 
 export interface SettingsUpdateInput {
@@ -172,4 +179,7 @@ export interface SettingsUpdateInput {
   oidcClientId?: string | null;
   oidcClientSecret?: string | null;
   oidcRedirectUrl?: string | null;
+  pushoverApiToken?: string | null;
+  pushoverUserKey?: string | null;
+  pushoverNotifyOnCompleted?: boolean | null;
 }

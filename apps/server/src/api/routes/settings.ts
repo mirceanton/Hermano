@@ -4,13 +4,14 @@ import type { SettingsResponse } from "@hermano/shared";
 import type { Config } from "../../config.js";
 import type { DbClient } from "../../db/client.js";
 import { RUN_INSTRUCTIONS } from "../../hermes/prompt.js";
-import { effectiveHermesConfig } from "../../settings/effective.js";
+import { effectiveHermesConfig, effectivePushoverConfig } from "../../settings/effective.js";
 import { getSettingsRow, updateSettingsRow, type SettingsPatch } from "../../settings/queries.js";
 
 function toSettingsResponse(config: Config, db: DbClient): SettingsResponse {
   const settings = getSettingsRow(db);
   const locks = config.envLocks;
   const hermes = effectiveHermesConfig(config, settings);
+  const pushover = effectivePushoverConfig(config, settings);
 
   return {
     hermes: {
@@ -32,6 +33,13 @@ function toSettingsResponse(config: Config, db: DbClient): SettingsResponse {
       clientSecretSet: locks.oidc ? Boolean(config.oidc?.clientSecret) : Boolean(settings.oidcClientSecret),
       redirectUrl: locks.oidc ? (config.oidc?.redirectUrl ?? "") : (settings.oidcRedirectUrl ?? ""),
     },
+    pushover: {
+      apiTokenSet: Boolean(pushover.apiToken),
+      apiTokenLocked: locks.pushoverApiToken,
+      userKeySet: Boolean(pushover.userKey),
+      userKeyLocked: locks.pushoverUserKey,
+      notifyOnCompleted: { value: pushover.notifyOnCompleted, locked: locks.pushoverNotifyOnCompleted },
+    },
   };
 }
 
@@ -45,6 +53,7 @@ const nullableString = z
   .optional();
 
 const nullablePositiveInt = z.number().int().positive().nullable().optional();
+const nullableBoolean = z.boolean().nullable().optional();
 
 const updateBodySchema = z.object({
   hermesAgentUrl: nullableString,
@@ -56,6 +65,9 @@ const updateBodySchema = z.object({
   oidcClientId: nullableString,
   oidcClientSecret: nullableString,
   oidcRedirectUrl: nullableString,
+  pushoverApiToken: nullableString,
+  pushoverUserKey: nullableString,
+  pushoverNotifyOnCompleted: nullableBoolean,
 });
 
 // Maps each editable body field to the EnvLocks key (if any) that locks it.
@@ -68,6 +80,9 @@ const FIELD_LOCKS = {
   oidcClientId: "oidc",
   oidcClientSecret: "oidc",
   oidcRedirectUrl: "oidc",
+  pushoverApiToken: "pushoverApiToken",
+  pushoverUserKey: "pushoverUserKey",
+  pushoverNotifyOnCompleted: "pushoverNotifyOnCompleted",
 } as const;
 
 export function registerSettingsRoutes(app: FastifyInstance, db: DbClient, config: Config): void {

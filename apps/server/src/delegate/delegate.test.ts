@@ -64,20 +64,22 @@ function fakeClient(overrides: Partial<HermesClientLike>): HermesClientLike {
 }
 
 describe("dispatch", () => {
-  it("resolves a successful run as completed", async () => {
+  it("resolves a successful run as completed and invokes onOutcome", async () => {
     const db = createTestDb();
     const alert = createPendingAlert(db, "fp1");
     const client = fakeClient({
       getRun: vi.fn(async () => ({ runId: "run-1", status: "completed", output: "fixed it\nSTATUS: completed", usage: null })),
     });
+    const onOutcome = vi.fn();
 
-    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10 });
+    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10, onOutcome });
 
     const latest = await waitForStatus(db, alert.id, "completed");
     expect(latest.runId).toBe("run-1");
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ id: alert.id }), "completed", "fixed it");
   });
 
-  it("marks failed when creating the run itself fails", async () => {
+  it("marks failed when creating the run itself fails, without invoking onOutcome", async () => {
     const db = createTestDb();
     const alert = createPendingAlert(db, "fp1");
     const client = fakeClient({
@@ -85,24 +87,30 @@ describe("dispatch", () => {
         throw new HermesApiError(500, "boom");
       }),
     });
+    const onOutcome = vi.fn();
 
-    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10 });
+    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10, onOutcome });
 
     const latest = await waitForStatus(db, alert.id, "failed");
     expect(latest.summary).toBeTruthy();
+    // createRun failing never reaches a "dispatched" row, so there's nothing
+    // for the dispatch worker to resolve — onOutcome is scoped to that.
+    expect(onOutcome).not.toHaveBeenCalled();
   });
 
-  it("marks failed immediately when the client is not configured", async () => {
+  it("marks failed immediately when the client is not configured, without invoking onOutcome", async () => {
     const db = createTestDb();
     const alert = createPendingAlert(db, "fp1");
     const client = fakeClient({ enabled: () => false });
+    const onOutcome = vi.fn();
 
-    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10 });
+    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10, onOutcome });
 
     await waitForStatus(db, alert.id, "failed");
+    expect(onOutcome).not.toHaveBeenCalled();
   });
 
-  it("marks timed_out and stops the run once the dispatch deadline passes", async () => {
+  it("marks timed_out, stops the run, and invokes onOutcome once the dispatch deadline passes", async () => {
     const db = createTestDb();
     const alert = createPendingAlert(db, "fp1");
     const stopRun = vi.fn(async () => {});
@@ -110,11 +118,29 @@ describe("dispatch", () => {
       getRun: vi.fn(async () => ({ runId: "run-1", status: "started", output: "", usage: null })),
       stopRun,
     });
+    const onOutcome = vi.fn();
 
-    dispatch(db, client, [alert], { dispatchTimeoutMs: 60, pollIntervalMs: 10 });
+    dispatch(db, client, [alert], { dispatchTimeoutMs: 60, pollIntervalMs: 10, onOutcome });
 
     await waitForStatus(db, alert.id, "timed_out");
     expect(stopRun).toHaveBeenCalledWith("run-1");
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ id: alert.id }), "timed_out", expect.any(String));
+  });
+
+  it("marks failed and invokes onOutcome when polling itself hits a hard (non-timeout) error", async () => {
+    const db = createTestDb();
+    const alert = createPendingAlert(db, "fp1");
+    const client = fakeClient({
+      getRun: vi.fn(async () => {
+        throw new HermesApiError(401, "unauthorized");
+      }),
+    });
+    const onOutcome = vi.fn();
+
+    dispatch(db, client, [alert], { dispatchTimeoutMs: 2000, pollIntervalMs: 10, onOutcome });
+
+    await waitForStatus(db, alert.id, "failed");
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ id: alert.id }), "failed", expect.any(String));
   });
 });
 

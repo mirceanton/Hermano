@@ -22,6 +22,9 @@ const envSchema = z.object({
   OIDC_CLIENT_SECRET: z.string().min(1).optional(),
   OIDC_REDIRECT_URL: z.string().url().optional(),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters").optional(),
+  HERMANO_PUSHOVER_API_TOKEN: z.string().min(1).optional(),
+  HERMANO_PUSHOVER_USER_KEY: z.string().min(1).optional(),
+  HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: z.enum(["true", "false"]).optional(),
 });
 
 export interface OidcConfig {
@@ -38,6 +41,12 @@ export interface HermesConfig {
   pollIntervalMs: number;
 }
 
+export interface PushoverConfig {
+  apiToken: string | undefined;
+  userKey: string | undefined;
+  notifyOnCompleted: boolean;
+}
+
 /**
  * Which settings-page fields are locked to their env var value. A field is
  * locked purely based on whether its own env var is *present*, independent
@@ -52,6 +61,9 @@ export interface EnvLocks {
   hermesDispatchTimeoutMs: boolean;
   hermesPollIntervalMs: boolean;
   oidc: boolean;
+  pushoverApiToken: boolean;
+  pushoverUserKey: boolean;
+  pushoverNotifyOnCompleted: boolean;
 }
 
 export type Config = {
@@ -59,6 +71,7 @@ export type Config = {
   port: number;
   webhookSharedSecret: string | null;
   hermes: HermesConfig;
+  pushover: PushoverConfig;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   webBaseUrl: string;
   staticWebDir: string | null;
@@ -116,6 +129,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       dispatchTimeoutMs: parsed.HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS,
       pollIntervalMs: parsed.HERMANO_HERMES_POLL_INTERVAL_MS,
     },
+    pushover: {
+      apiToken: parsed.HERMANO_PUSHOVER_API_TOKEN,
+      userKey: parsed.HERMANO_PUSHOVER_USER_KEY,
+      notifyOnCompleted: parsed.HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED === "true",
+    },
     logLevel: parsed.LOG_LEVEL,
     webBaseUrl,
     staticWebDir: parsed.STATIC_WEB_DIR ?? null,
@@ -127,6 +145,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       hermesDispatchTimeoutMs: env.HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS != null,
       hermesPollIntervalMs: env.HERMANO_HERMES_POLL_INTERVAL_MS != null,
       oidc: allOidcFieldsSet,
+      pushoverApiToken: env.HERMANO_PUSHOVER_API_TOKEN != null,
+      pushoverUserKey: env.HERMANO_PUSHOVER_USER_KEY != null,
+      pushoverNotifyOnCompleted: env.HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED != null,
     },
   };
 }

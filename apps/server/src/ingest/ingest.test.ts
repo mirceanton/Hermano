@@ -8,6 +8,7 @@ import {
   getLatestDelegation,
   markDispatchFailed,
   markDispatched,
+  markManualDelegation,
   recordDelegationOutcome,
 } from "../delegate/queries.js";
 import { processWebhook } from "./ingest.js";
@@ -255,5 +256,83 @@ describe("processWebhook", () => {
     const latest = getLatestDelegation(db, alert.id);
     expect(latest?.status).toBe("completed");
     expect(latest?.summary).toBe("fixed it");
+  });
+
+  it("flags a brand-new alert as unmanaged when it matches no rule, but not once one is manually delegated", () => {
+    const db = createTestDb();
+
+    const res = processWebhook(db, firingPayload("fp1", "TestAlert"));
+    expect(res.newlyUnmanaged.map((a) => a.fingerprint)).toEqual(["fp1"]);
+
+    // A repeat notification while still unmanaged must not re-flag it (would be spammy).
+    const res2 = processWebhook(db, firingPayload("fp1", "TestAlert"));
+    expect(res2.newlyUnmanaged).toHaveLength(0);
+  });
+
+  it("flags a resolved alert as unmanaged only when it was never delegated", () => {
+    const db = createTestDb();
+    const now = new Date();
+    db.insert(delegationRules)
+      .values({ name: "forward TargetAlert", matchers: { alertname: "TargetAlert" }, enabled: true, createdAt: now, updatedAt: now })
+      .run();
+
+    processWebhook(db, firingPayload("fp1", "UnmanagedAlert"));
+    processWebhook(db, firingPayload("fp2", "TargetAlert"));
+
+    const res = processWebhook(db, resolvedPayload("fp1", "UnmanagedAlert"));
+    expect(res.resolvedUnmanaged.map((a) => a.fingerprint)).toEqual(["fp1"]);
+
+    const res2 = processWebhook(db, resolvedPayload("fp2", "TargetAlert"));
+    expect(res2.resolvedUnmanaged).toHaveLength(0);
+  });
+
+  it("does not flag a resolve as unmanaged when we never saw the alert firing", () => {
+    const db = createTestDb();
+    const res = processWebhook(db, resolvedPayload("fp-orphan", "TestAlert"));
+    expect(res.resolvedUnmanaged).toHaveLength(0);
+  });
+
+  it("flags a recurrence when an already-completed episode fires again while still active", () => {
+    const db = createTestDb();
+    processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    const alert = getActiveAlert(db, "fp1");
+    markManualDelegation(db, alert.id);
+    markDispatched(db, alert.id, "run-1");
+    recordDelegationOutcome(db, alert.id, "completed", "fixed it", null);
+
+    const res = processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    expect(res.recurrences.map((a) => a.fingerprint)).toEqual(["fp1"]);
+  });
+
+  it("does not flag a recurrence when the episode's latest delegation is not completed", () => {
+    const db = createTestDb();
+    processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    const alert = getActiveAlert(db, "fp1");
+    markManualDelegation(db, alert.id);
+    markDispatchFailed(db, alert.id, "boom");
+
+    const res = processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    expect(res.recurrences).toHaveLength(0);
+  });
+
+  it("flags a recurrence when a brand-new episode fires after the prior episode (same fingerprint) was completed and resolved", () => {
+    const db = createTestDb();
+    processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    const alert = getActiveAlert(db, "fp1");
+    markManualDelegation(db, alert.id);
+    markDispatched(db, alert.id, "run-1");
+    recordDelegationOutcome(db, alert.id, "completed", "fixed it", null);
+    processWebhook(db, resolvedPayload("fp1", "TargetAlert"));
+
+    // Same fingerprint (AlertManager fingerprints are deterministic per label set), new episode.
+    const res = processWebhook(db, firingPayload("fp1", "TargetAlert"));
+    expect(res.created).toBe(1);
+    expect(res.recurrences.map((a) => a.fingerprint)).toEqual(["fp1"]);
+  });
+
+  it("does not flag a recurrence for a fingerprint with no prior history at all", () => {
+    const db = createTestDb();
+    const res = processWebhook(db, firingPayload("fp-new", "BrandNewAlert"));
+    expect(res.recurrences).toHaveLength(0);
   });
 });

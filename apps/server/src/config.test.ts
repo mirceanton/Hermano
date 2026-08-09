@@ -16,6 +16,11 @@ describe("loadConfig", () => {
       dispatchTimeoutMs: 30 * 60_000,
       pollIntervalMs: 3_000,
     });
+    expect(config.pushover).toEqual({
+      apiToken: undefined,
+      userKey: undefined,
+      notifyOnCompleted: false,
+    });
     expect(config.logLevel).toBe("info");
     expect(config.staticWebDir).toBeNull();
     expect(config.envLocks).toEqual({
@@ -24,6 +29,9 @@ describe("loadConfig", () => {
       hermesDispatchTimeoutMs: false,
       hermesPollIntervalMs: false,
       oidc: false,
+      pushoverApiToken: false,
+      pushoverUserKey: false,
+      pushoverNotifyOnCompleted: false,
     });
   });
 
@@ -41,6 +49,9 @@ describe("loadConfig", () => {
       HERMANO_HERMES_AGENT_API_KEY: "key123",
       HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS: "60000",
       HERMANO_HERMES_POLL_INTERVAL_MS: "1000",
+      HERMANO_PUSHOVER_API_TOKEN: "app-token",
+      HERMANO_PUSHOVER_USER_KEY: "user-key",
+      HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: "true",
       LOG_LEVEL: "debug",
     });
     expect(config.port).toBe(5050);
@@ -51,6 +62,11 @@ describe("loadConfig", () => {
       dispatchTimeoutMs: 60_000,
       pollIntervalMs: 1_000,
     });
+    expect(config.pushover).toEqual({
+      apiToken: "app-token",
+      userKey: "user-key",
+      notifyOnCompleted: true,
+    });
     expect(config.logLevel).toBe("debug");
     expect(config.envLocks).toEqual({
       hermesAgentUrl: true,
@@ -58,6 +74,9 @@ describe("loadConfig", () => {
       hermesDispatchTimeoutMs: true,
       hermesPollIntervalMs: true,
       oidc: false,
+      pushoverApiToken: true,
+      pushoverUserKey: true,
+      pushoverNotifyOnCompleted: true,
     });
   });
 

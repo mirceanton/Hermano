@@ -152,6 +152,11 @@ export const settings = sqliteTable("settings", {
   // Auto-generated on first use when OIDC becomes DB-configured and no
   // SESSION_SECRET env var is set — never exposed via the API.
   sessionSecret: text("session_secret"),
+  pushoverApiToken: text("pushover_api_token"),
+  pushoverUserKey: text("pushover_user_key"),
+  // Nullable, not defaulted: null means "unset" (fall through to the env-or-
+  // default value), not false — see settings/effective.ts.
+  pushoverNotifyOnCompleted: integer("pushover_notify_on_completed", { mode: "boolean" }),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
