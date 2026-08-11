@@ -13,7 +13,7 @@ function TopNav() {
     )
 
   return (
-    <nav className="flex items-center gap-1 rounded-lg bg-muted p-[3px]">
+    <nav className="flex items-center justify-center gap-1 rounded-lg bg-muted p-[3px] sm:justify-start">
       <NavLink to="/" end className={linkClass}>
         Overview
       </NavLink>
@@ -57,19 +57,26 @@ function UserMenu() {
 export function AppShell() {
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="h-14 border-b">
-        <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold">
-            <Bell className="size-5" />
-            Hermano
-          </Link>
-          <TopNav />
-          <div className="flex items-center gap-1">
-            <UserMenu />
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" aria-label="Settings" nativeButton={false} render={<Link to="/settings" />}>
-              <Settings className="size-4" />
-            </Button>
+      <header className="border-b">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="flex h-14 items-center justify-between gap-2">
+            <Link to="/" className="flex items-center gap-2 font-semibold">
+              <Bell className="size-5" />
+              Hermano
+            </Link>
+            <div className="hidden sm:block">
+              <TopNav />
+            </div>
+            <div className="flex items-center gap-1">
+              <UserMenu />
+              <ThemeToggle />
+              <Button variant="ghost" size="icon" aria-label="Settings" nativeButton={false} render={<Link to="/settings" />}>
+                <Settings className="size-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="pb-3 sm:hidden">
+            <TopNav />
           </div>
         </div>
       </header>
