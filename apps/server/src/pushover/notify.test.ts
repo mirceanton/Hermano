@@ -63,6 +63,24 @@ describe("pushover/notify", () => {
     expect(body.get("user")).toBe("user-key");
     expect(body.get("priority")).toBe("0");
     expect(body.get("title")).toContain("TestAlert");
+    expect(body.get("url")).toBe(`${config.webBaseUrl}/alerts/${alert.id}`);
+  });
+
+  it("builds the 'View in Hermano' link from the configured public URL rather than the server's local bind address", async () => {
+    const db = createTestDb();
+    const config = loadConfig(BASE_ENV);
+    updateSettingsRow(db, {
+      pushoverApiToken: "app-token",
+      pushoverUserKey: "user-key",
+      publicUrl: "https://hermano.example.com",
+    });
+    const alert = insertAlert(db);
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifyUnmanagedFiring(db, config, alert);
+
+    expect(fetchCalls(fetchSpy)[0]?.get("url")).toBe(`https://hermano.example.com/alerts/${alert.id}`);
   });
 
   it("sends an unmanaged-resolved push at low priority", async () => {

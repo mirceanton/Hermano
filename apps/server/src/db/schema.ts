@@ -139,6 +139,10 @@ export const sessions = sqliteTable("sessions", {
  */
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // The externally-reachable origin Hermano is served at, used to build
+  // links back into the dashboard (Pushover's "View in Hermano", OIDC's
+  // redirect default). Falls back to http://127.0.0.1:<port> when unset.
+  publicUrl: text("public_url"),
   hermesAgentUrl: text("hermes_agent_url"),
   hermesAgentApiKey: text("hermes_agent_api_key"),
   hermesDispatchTimeoutMs: integer("hermes_dispatch_timeout_ms"),

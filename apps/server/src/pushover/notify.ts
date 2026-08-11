@@ -1,7 +1,7 @@
 import type { Config, PushoverConfig } from "../config.js";
 import type { DbClient } from "../db/client.js";
 import type { AlertRow } from "../db/schema.js";
-import { effectivePushoverConfig } from "../settings/effective.js";
+import { effectivePublicUrl, effectivePushoverConfig } from "../settings/effective.js";
 import { getSettingsRow } from "../settings/queries.js";
 import { PushoverClient } from "./client.js";
 
@@ -10,18 +10,23 @@ function truncate(s: string, max: number): string {
   return trimmed.length > max ? trimmed.slice(0, max - 1) + "…" : trimmed;
 }
 
-function alertUrl(config: Config, alert: AlertRow): string {
-  return `${config.webBaseUrl}/alerts/${alert.id}`;
+function alertUrl(publicUrl: string, alert: AlertRow): string {
+  return `${publicUrl}/alerts/${alert.id}`;
 }
 
-function resolvePushover(db: DbClient, config: Config): { pushover: PushoverConfig; client: PushoverClient } {
-  const pushover = effectivePushoverConfig(config, getSettingsRow(db));
-  return { pushover, client: new PushoverClient({ apiToken: pushover.apiToken, userKey: pushover.userKey }) };
+function resolvePushover(db: DbClient, config: Config): { pushover: PushoverConfig; client: PushoverClient; publicUrl: string } {
+  const settings = getSettingsRow(db);
+  const pushover = effectivePushoverConfig(config, settings);
+  return {
+    pushover,
+    client: new PushoverClient({ apiToken: pushover.apiToken, userKey: pushover.userKey }),
+    publicUrl: effectivePublicUrl(config, settings),
+  };
 }
 
 /** An alert just started firing and matches no delegation rule — nobody (human or agent) is on it. */
 export async function notifyUnmanagedFiring(db: DbClient, config: Config, alert: AlertRow): Promise<void> {
-  const { client } = resolvePushover(db, config);
+  const { client, publicUrl } = resolvePushover(db, config);
   if (!client.enabled()) return;
 
   const summary = alert.annotations.summary;
@@ -35,21 +40,21 @@ export async function notifyUnmanagedFiring(db: DbClient, config: Config, alert:
       .filter((line): line is string => Boolean(line))
       .join("\n"),
     priority: 0,
-    url: alertUrl(config, alert),
+    url: alertUrl(publicUrl, alert),
     urlTitle: "View in Hermano",
   });
 }
 
 /** An unmanaged alert (see above) has resolved — mirrors AlertManager's own resolved notification. */
 export async function notifyUnmanagedResolved(db: DbClient, config: Config, alert: AlertRow): Promise<void> {
-  const { client } = resolvePushover(db, config);
+  const { client, publicUrl } = resolvePushover(db, config);
   if (!client.enabled()) return;
 
   await client.send({
     title: `✅ ${alert.alertName} resolved`,
     message: `Severity: ${alert.severity || "unknown"}`,
     priority: -1,
-    url: alertUrl(config, alert),
+    url: alertUrl(publicUrl, alert),
     urlTitle: "View in Hermano",
   });
 }
@@ -60,14 +65,14 @@ export async function notifyUnmanagedResolved(db: DbClient, config: Config, aler
  * and a brand-new episode started later. Either way, the fix didn't hold.
  */
 export async function notifyRecurrence(db: DbClient, config: Config, alert: AlertRow): Promise<void> {
-  const { client } = resolvePushover(db, config);
+  const { client, publicUrl } = resolvePushover(db, config);
   if (!client.enabled()) return;
 
   await client.send({
     title: `⚠️ ${alert.alertName} fired again`,
     message: "This alert was previously marked fixed by Hermes and has started firing again. See Hermano for the full history.",
     priority: 1,
-    url: alertUrl(config, alert),
+    url: alertUrl(publicUrl, alert),
     urlTitle: "View in Hermano",
   });
 }
@@ -80,7 +85,7 @@ export async function notifyDelegationOutcome(
   status: "completed" | "failed" | "timed_out",
   summary: string,
 ): Promise<void> {
-  const { pushover, client } = resolvePushover(db, config);
+  const { pushover, client, publicUrl } = resolvePushover(db, config);
   if (status === "completed" && !pushover.notifyOnCompleted) return;
   if (!client.enabled()) return;
 
@@ -89,7 +94,7 @@ export async function notifyDelegationOutcome(
       title: `🤖 ${alert.alertName} fixed`,
       message: truncate(summary, 800),
       priority: -1,
-      url: alertUrl(config, alert),
+      url: alertUrl(publicUrl, alert),
       urlTitle: "View in Hermano",
     });
     return;
@@ -100,7 +105,7 @@ export async function notifyDelegationOutcome(
     title: `🚨 ${alert.alertName} needs you`,
     message: `Hermes ${label} to fix this alert.\n\n${truncate(summary, 800)}`,
     priority: 1,
-    url: alertUrl(config, alert),
+    url: alertUrl(publicUrl, alert),
     urlTitle: "View in Hermano",
   });
 }

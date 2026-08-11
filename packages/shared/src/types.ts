@@ -138,6 +138,10 @@ export interface LockableField<T> {
 }
 
 export interface SettingsResponse {
+  general: {
+    /** Falls back to this server's own http://127.0.0.1:<port> origin when unset — see the caption shown alongside it. */
+    publicUrl: LockableField<string>;
+  };
   hermes: {
     agentUrl: LockableField<string>;
     /** Never the actual key — just whether one is currently configured (env or DB). */
@@ -170,6 +174,7 @@ export interface SettingsResponse {
 }
 
 export interface SettingsUpdateInput {
+  publicUrl?: string | null;
   hermesAgentUrl?: string | null;
   hermesAgentApiKey?: string | null;
   hermesDispatchTimeoutMs?: number | null;

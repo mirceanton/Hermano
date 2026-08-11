@@ -3,7 +3,13 @@ import { loadConfig } from "../config.js";
 import { RUN_INSTRUCTIONS } from "../hermes/prompt.js";
 import { createTestDb } from "../db/test-helpers.js";
 import { getSettingsRow, updateSettingsRow } from "./queries.js";
-import { effectiveHermesConfig, effectiveOidcConfig, effectivePushoverConfig, effectiveSystemPrompt } from "./effective.js";
+import {
+  effectiveHermesConfig,
+  effectiveOidcConfig,
+  effectivePublicUrl,
+  effectivePushoverConfig,
+  effectiveSystemPrompt,
+} from "./effective.js";
 
 const BASE_ENV = { HERMANO_DATABASE_PATH: "/data/hermano.sqlite3" };
 
@@ -112,6 +118,19 @@ describe("effectiveOidcConfig", () => {
     expect(effectiveOidcConfig(config, getSettingsRow(db))).toBeNull();
   });
 
+  it("defaults the redirect URL to a DB-configured publicUrl", () => {
+    const config = loadConfig(BASE_ENV);
+    const db = createTestDb();
+    updateSettingsRow(db, {
+      oidcIssuerUrl: "https://db-auth.example.com",
+      oidcClientId: "hermano-db",
+      oidcClientSecret: "db-secret",
+      publicUrl: "https://hermano.example.com",
+    });
+
+    expect(effectiveOidcConfig(config, getSettingsRow(db))?.redirectUrl).toBe("https://hermano.example.com/auth/callback");
+  });
+
   it("honors an explicit DB redirect URL override", () => {
     const config = loadConfig(BASE_ENV);
     const db = createTestDb();
@@ -125,6 +144,30 @@ describe("effectiveOidcConfig", () => {
     expect(effectiveOidcConfig(config, getSettingsRow(db))?.redirectUrl).toBe(
       "https://hermano.example.com/auth/callback",
     );
+  });
+});
+
+describe("effectivePublicUrl", () => {
+  it("falls back to config.publicUrl (webBaseUrl) when neither env nor DB is set", () => {
+    const config = loadConfig(BASE_ENV);
+    const db = createTestDb();
+    expect(effectivePublicUrl(config, getSettingsRow(db))).toBe(config.webBaseUrl);
+  });
+
+  it("uses the DB value when the env var is unset", () => {
+    const config = loadConfig(BASE_ENV);
+    const db = createTestDb();
+    updateSettingsRow(db, { publicUrl: "https://db-configured.example.com" });
+
+    expect(effectivePublicUrl(config, getSettingsRow(db))).toBe("https://db-configured.example.com");
+  });
+
+  it("prefers the env var over a DB value when both are set", () => {
+    const config = loadConfig({ ...BASE_ENV, HERMANO_PUBLIC_URL: "https://env-configured.example.com" });
+    const db = createTestDb();
+    updateSettingsRow(db, { publicUrl: "https://db-configured.example.com" });
+
+    expect(effectivePublicUrl(config, getSettingsRow(db))).toBe("https://env-configured.example.com");
   });
 });
 

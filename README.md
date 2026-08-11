@@ -43,6 +43,7 @@ All configuration options are exposed via environment variables — see `apps/se
 | --- | --- | --- |
 | `HERMANO_DATABASE_PATH` | *(required)* | SQLite database file path |
 | `HERMANO_PORT` | `8080` | HTTP listen port |
+| `HERMANO_PUBLIC_URL` | *(unset)* | The externally-reachable origin Hermano is served at, e.g. `https://hermano.example.com`. Used to build links back into the dashboard (Pushover's "View in Hermano" link, OIDC's redirect default). Left unset, those links fall back to `http://127.0.0.1:<port>`, which only works from the server itself |
 | `HERMANO_WEBHOOK_SHARED_SECRET` | *(unset = open)* | Optional bearer-token check on `POST /api/webhook` — Alertmanager can't do OIDC, so this is the only auth available for that endpoint |
 | `HERMANO_HERMES_AGENT_URL` | *(unset)* | Hermes' OpenAI-compatible API server root, e.g. `http://hermes-api.ai.svc.cluster.local:8642`. Unset = rules still match, but nothing is ever dispatched (every match ends up `failed`) |
 | `HERMANO_HERMES_AGENT_API_KEY` | *(unset)* | Bearer token for that API (Hermes' configured `API_SERVER_KEY`), if it requires one |

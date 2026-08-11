@@ -25,6 +25,13 @@ const envSchema = z.object({
   HERMANO_PUSHOVER_API_TOKEN: z.string().min(1).optional(),
   HERMANO_PUSHOVER_USER_KEY: z.string().min(1).optional(),
   HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: z.enum(["true", "false"]).optional(),
+  // The externally-reachable origin Hermano is served at, e.g.
+  // https://hermano.example.com. Used to build links back into the
+  // dashboard (Pushover's "View in Hermano", OIDC's redirect default) —
+  // left unset, those links fall back to webBaseUrl, which is only ever
+  // http://127.0.0.1:<port> and therefore unusable from anywhere but the
+  // server itself.
+  HERMANO_PUBLIC_URL: z.string().url().optional(),
 });
 
 export interface OidcConfig {
@@ -64,6 +71,7 @@ export interface EnvLocks {
   pushoverApiToken: boolean;
   pushoverUserKey: boolean;
   pushoverNotifyOnCompleted: boolean;
+  publicUrl: boolean;
 }
 
 export type Config = {
@@ -74,6 +82,8 @@ export type Config = {
   pushover: PushoverConfig;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   webBaseUrl: string;
+  /** The externally-reachable origin used to build dashboard links (see HERMANO_PUBLIC_URL). Falls back to webBaseUrl when unset. */
+  publicUrl: string;
   staticWebDir: string | null;
   /** null means single-user mode: no auth middleware is mounted at all. */
   oidc: OidcConfig | null;
@@ -92,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const parsed = result.data;
   const webBaseUrl = `http://127.0.0.1:${parsed.HERMANO_PORT}`;
+  const publicUrl = parsed.HERMANO_PUBLIC_URL ?? webBaseUrl;
 
   const oidcFieldsSet = [parsed.OIDC_ISSUER_URL, parsed.OIDC_CLIENT_ID, parsed.OIDC_CLIENT_SECRET];
   const anyOidcFieldSet = oidcFieldsSet.some((v) => v != null);
@@ -115,7 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         issuerUrl: parsed.OIDC_ISSUER_URL!,
         clientId: parsed.OIDC_CLIENT_ID!,
         clientSecret: parsed.OIDC_CLIENT_SECRET!,
-        redirectUrl: parsed.OIDC_REDIRECT_URL ?? `${webBaseUrl}/auth/callback`,
+        redirectUrl: parsed.OIDC_REDIRECT_URL ?? `${publicUrl}/auth/callback`,
       }
     : null;
 
@@ -136,6 +147,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     logLevel: parsed.LOG_LEVEL,
     webBaseUrl,
+    publicUrl,
     staticWebDir: parsed.STATIC_WEB_DIR ?? null,
     oidc,
     sessionSecret: parsed.SESSION_SECRET ?? null,
@@ -148,6 +160,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       pushoverApiToken: env.HERMANO_PUSHOVER_API_TOKEN != null,
       pushoverUserKey: env.HERMANO_PUSHOVER_USER_KEY != null,
       pushoverNotifyOnCompleted: env.HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED != null,
+      publicUrl: env.HERMANO_PUBLIC_URL != null,
     },
   };
 }
