@@ -78,6 +78,72 @@ function SavedNote({ show }: { show: boolean }) {
   return <span className="text-sm text-muted-foreground">Saved</span>
 }
 
+function GeneralSection({ general }: { general: SettingsResponse["general"] }) {
+  const idPrefix = useId()
+  const updateSettings = useUpdateSettings()
+
+  const [publicUrl, setPublicUrl] = useState(general.publicUrl.value)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setPublicUrl(general.publicUrl.value)
+  }, [general.publicUrl.value])
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    updateSettings.mutate({ publicUrl: publicUrl.trim() === "" ? null : publicUrl }, { onSuccess: () => setSaved(true) })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>General</CardTitle>
+        <CardDescription>Where Hermano itself is reachable — used to build links back into the dashboard.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field
+            label="Public URL"
+            htmlFor={`${idPrefix}-public-url`}
+            caption={
+              general.publicUrl.locked ? (
+                <EnvCaption envVar="HERMANO_PUBLIC_URL" />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Used to build the "View in Hermano" link in Pushover notifications, and as the OIDC redirect default. Defaults to
+                  this server's own <code className="rounded bg-muted px-1 py-0.5">http://127.0.0.1:&lt;port&gt;</code> origin when
+                  left empty, which is only reachable from the server itself.
+                </p>
+              )
+            }
+          >
+            <Input
+              id={`${idPrefix}-public-url`}
+              type="url"
+              disabled={general.publicUrl.locked}
+              value={publicUrl}
+              onChange={(e) => {
+                setPublicUrl(e.target.value)
+                setSaved(false)
+              }}
+              placeholder="https://hermano.example.com"
+            />
+          </Field>
+
+          {updateSettings.isError && <p className="text-sm text-destructive">{updateSettings.error.message}</p>}
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={updateSettings.isPending || general.publicUrl.locked}>
+              Save
+            </Button>
+            <SavedNote show={saved} />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 function HermesSection({ hermes }: { hermes: SettingsResponse["hermes"] }) {
   const idPrefix = useId()
   const updateSettings = useUpdateSettings()
@@ -542,6 +608,7 @@ export function SettingsPage() {
 
       {settings && (
         <div className="flex flex-col gap-6">
+          <GeneralSection general={settings.general} />
           <HermesSection hermes={settings.hermes} />
           <PromptSection systemPrompt={settings.systemPrompt} />
           <PushoverSection pushover={settings.pushover} />

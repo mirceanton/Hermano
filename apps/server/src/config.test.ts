@@ -23,6 +23,7 @@ describe("loadConfig", () => {
     });
     expect(config.logLevel).toBe("info");
     expect(config.staticWebDir).toBeNull();
+    expect(config.publicUrl).toBe(config.webBaseUrl);
     expect(config.envLocks).toEqual({
       hermesAgentUrl: false,
       hermesAgentApiKey: false,
@@ -32,6 +33,7 @@ describe("loadConfig", () => {
       pushoverApiToken: false,
       pushoverUserKey: false,
       pushoverNotifyOnCompleted: false,
+      publicUrl: false,
     });
   });
 
@@ -52,6 +54,7 @@ describe("loadConfig", () => {
       HERMANO_PUSHOVER_API_TOKEN: "app-token",
       HERMANO_PUSHOVER_USER_KEY: "user-key",
       HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: "true",
+      HERMANO_PUBLIC_URL: "https://hermano.example.com",
       LOG_LEVEL: "debug",
     });
     expect(config.port).toBe(5050);
@@ -68,6 +71,7 @@ describe("loadConfig", () => {
       notifyOnCompleted: true,
     });
     expect(config.logLevel).toBe("debug");
+    expect(config.publicUrl).toBe("https://hermano.example.com");
     expect(config.envLocks).toEqual({
       hermesAgentUrl: true,
       hermesAgentApiKey: true,
@@ -77,12 +81,23 @@ describe("loadConfig", () => {
       pushoverApiToken: true,
       pushoverUserKey: true,
       pushoverNotifyOnCompleted: true,
+      publicUrl: true,
     });
   });
 
   it("derives webBaseUrl from the port", () => {
     const config = loadConfig({ ...BASE_ENV, HERMANO_PORT: "5050" });
     expect(config.webBaseUrl).toBe("http://127.0.0.1:5050");
+  });
+
+  it("falls back to webBaseUrl for publicUrl when HERMANO_PUBLIC_URL is unset", () => {
+    const config = loadConfig({ ...BASE_ENV, HERMANO_PORT: "5050" });
+    expect(config.publicUrl).toBe("http://127.0.0.1:5050");
+  });
+
+  it("honors HERMANO_PUBLIC_URL when set", () => {
+    const config = loadConfig({ ...BASE_ENV, HERMANO_PUBLIC_URL: "https://hermano.example.com" });
+    expect(config.publicUrl).toBe("https://hermano.example.com");
   });
 
   it("fails fast with a clear error when HERMANO_DATABASE_PATH is missing", () => {
@@ -120,6 +135,18 @@ describe("loadConfig", () => {
       OIDC_CLIENT_ID: "hermano",
       OIDC_CLIENT_SECRET: "secret",
       OIDC_REDIRECT_URL: "https://hermano.example.com/auth/callback",
+      SESSION_SECRET,
+    });
+    expect(config.oidc?.redirectUrl).toBe("https://hermano.example.com/auth/callback");
+  });
+
+  it("defaults the OIDC redirect URL to HERMANO_PUBLIC_URL when set", () => {
+    const config = loadConfig({
+      ...BASE_ENV,
+      OIDC_ISSUER_URL: "https://auth.example.com",
+      OIDC_CLIENT_ID: "hermano",
+      OIDC_CLIENT_SECRET: "secret",
+      HERMANO_PUBLIC_URL: "https://hermano.example.com",
       SESSION_SECRET,
     });
     expect(config.oidc?.redirectUrl).toBe("https://hermano.example.com/auth/callback");

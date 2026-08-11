@@ -39,6 +39,17 @@ export function effectiveSystemPrompt(settings: SettingsRow): string {
 }
 
 /**
+ * The externally-reachable origin used to build links back into the
+ * dashboard (Pushover's "View in Hermano", OIDC's redirect default).
+ * config.publicUrl already falls back to webBaseUrl (http://127.0.0.1:<port>)
+ * when HERMANO_PUBLIC_URL is unset, so that's the final fallback here too.
+ */
+export function effectivePublicUrl(config: Config, settings: SettingsRow): string {
+  if (config.envLocks.publicUrl) return config.publicUrl;
+  return settings.publicUrl ?? config.publicUrl;
+}
+
+/**
  * OIDC has no per-field locking (loadConfig already requires its three env
  * vars all-or-nothing), so this is env-or-DB at the whole-integration
  * level: env config if configured there, else a DB-built OidcConfig once
@@ -52,7 +63,7 @@ export function effectiveOidcConfig(config: Config, settings: SettingsRow): Oidc
       issuerUrl: settings.oidcIssuerUrl,
       clientId: settings.oidcClientId,
       clientSecret: settings.oidcClientSecret,
-      redirectUrl: settings.oidcRedirectUrl || `${config.webBaseUrl}/auth/callback`,
+      redirectUrl: settings.oidcRedirectUrl || `${effectivePublicUrl(config, settings)}/auth/callback`,
     };
   }
 

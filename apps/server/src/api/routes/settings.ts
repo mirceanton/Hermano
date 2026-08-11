@@ -4,7 +4,7 @@ import type { SettingsResponse } from "@hermano/shared";
 import type { Config } from "../../config.js";
 import type { DbClient } from "../../db/client.js";
 import { RUN_INSTRUCTIONS } from "../../hermes/prompt.js";
-import { effectiveHermesConfig, effectivePushoverConfig } from "../../settings/effective.js";
+import { effectiveHermesConfig, effectivePublicUrl, effectivePushoverConfig } from "../../settings/effective.js";
 import { getSettingsRow, updateSettingsRow, type SettingsPatch } from "../../settings/queries.js";
 
 function toSettingsResponse(config: Config, db: DbClient): SettingsResponse {
@@ -14,6 +14,9 @@ function toSettingsResponse(config: Config, db: DbClient): SettingsResponse {
   const pushover = effectivePushoverConfig(config, settings);
 
   return {
+    general: {
+      publicUrl: { value: effectivePublicUrl(config, settings), locked: locks.publicUrl },
+    },
     hermes: {
       agentUrl: { value: hermes.baseUrl, locked: locks.hermesAgentUrl },
       agentApiKeySet: Boolean(hermes.apiKey),
@@ -56,6 +59,7 @@ const nullablePositiveInt = z.number().int().positive().nullable().optional();
 const nullableBoolean = z.boolean().nullable().optional();
 
 const updateBodySchema = z.object({
+  publicUrl: nullableString,
   hermesAgentUrl: nullableString,
   hermesAgentApiKey: nullableString,
   hermesDispatchTimeoutMs: nullablePositiveInt,
@@ -72,6 +76,7 @@ const updateBodySchema = z.object({
 
 // Maps each editable body field to the EnvLocks key (if any) that locks it.
 const FIELD_LOCKS = {
+  publicUrl: "publicUrl",
   hermesAgentUrl: "hermesAgentUrl",
   hermesAgentApiKey: "hermesAgentApiKey",
   hermesDispatchTimeoutMs: "hermesDispatchTimeoutMs",
