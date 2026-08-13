@@ -79,19 +79,14 @@ function AlertCard({ alert, onForwardKind }: { alert: AlertListItem; onForwardKi
         {truncate(alert.annotations.summary ?? "", 140)}
       </p>
 
-      <div
-        className={`flex min-h-[34px] flex-wrap items-center gap-2 ${!status ? "justify-between" : "justify-end"}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex min-h-[34px] flex-wrap items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onForwardKind(alert)}>
+          Forward this kind →
+        </Button>
         {!status && (
-          <>
-            <Button type="button" variant="ghost" size="sm" onClick={() => onForwardKind(alert)}>
-              Forward this kind →
-            </Button>
-            <Button type="button" size="sm" disabled={delegateNow.isPending} onClick={() => delegateNow.mutate()}>
-              Delegate now
-            </Button>
-          </>
+          <Button type="button" size="sm" disabled={delegateNow.isPending} onClick={() => delegateNow.mutate()}>
+            Delegate now
+          </Button>
         )}
         {(status === "failed" || status === "timed_out") && (
           <Button type="button" size="sm" disabled={delegateNow.isPending} onClick={() => delegateNow.mutate()}>
