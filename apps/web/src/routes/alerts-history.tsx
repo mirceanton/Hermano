@@ -3,6 +3,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router"
 import { RuleDialog } from "@/components/rule-dialog"
 import { StatusBadge } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -99,7 +100,14 @@ export function AlertsHistoryPage() {
                   onClick={() => navigate(`/alerts/${alert.id}`)}
                 >
                   <td className="px-3 py-2">
-                    <div className={`font-medium ${severityTextClass(alert.severity)}`}>{alert.alertName}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-medium ${severityTextClass(alert.severity)}`}>{alert.alertName}</span>
+                      {alert.episodeCount > 1 && (
+                        <Badge variant="outline" title="This alert has recurred as a separate episode after previously resolving">
+                          {alert.episodeCount}× recurring
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">{alert.timesFired}× fired</div>
                   </td>
                   <td className="max-w-xs px-3 py-2 text-muted-foreground">

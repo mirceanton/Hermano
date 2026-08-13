@@ -1,10 +1,11 @@
-import { count, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import type {
   AlertDetail,
   AlertListItem,
   AlertTrigger,
   Delegation,
   LatestDelegationSummary,
+  RelatedEpisode,
   TimelineEvent,
 } from "@hermano/shared";
 import type { DbClient } from "../db/client.js";
@@ -53,6 +54,11 @@ function toAlertTrigger(t: AlertTriggerRow): AlertTrigger {
   return { id: t.id, alertId: t.alertId, firedAt: t.firedAt.getTime(), createdAt: t.createdAt.getTime() };
 }
 
+/** How many episodes (active or resolved) share this fingerprint — 1 for an alert that has never recurred. */
+function countEpisodesForFingerprint(db: DbClient, fingerprint: string): number {
+  return db.select({ value: count() }).from(alerts).where(eq(alerts.fingerprint, fingerprint)).get()!.value;
+}
+
 export function toAlertListItem(db: DbClient, alert: AlertRow): AlertListItem {
   const triggers = getAlertTriggers(db, alert.id);
   const latest = getLatestDelegation(db, alert.id);
@@ -74,7 +80,29 @@ export function toAlertListItem(db: DbClient, alert: AlertRow): AlertListItem {
     firstFiredAt: triggers.length > 0 ? triggers[0]!.firedAt.getTime() : null,
     lastFiredAt: triggers.length > 0 ? triggers[triggers.length - 1]!.firedAt.getTime() : null,
     latestDelegation: latest ? toLatestDelegationSummary(latest) : null,
+    episodeCount: countEpisodesForFingerprint(db, alert.fingerprint),
   };
+}
+
+/** Every other episode sharing this alert's fingerprint, most recent first — lets the detail page link recurrences of the same underlying alert together. */
+function getRelatedEpisodes(db: DbClient, alert: AlertRow): RelatedEpisode[] {
+  const rows = db
+    .select()
+    .from(alerts)
+    .where(and(eq(alerts.fingerprint, alert.fingerprint), ne(alerts.id, alert.id)))
+    .orderBy(desc(alerts.startsAt))
+    .all();
+
+  return rows.map((row) => {
+    const latest = getLatestDelegation(db, row.id);
+    return {
+      id: row.id,
+      startsAt: row.startsAt.getTime(),
+      resolvedAt: row.resolvedAt ? row.resolvedAt.getTime() : null,
+      timesFired: getAlertTriggers(db, row.id).length,
+      latestDelegationStatus: latest ? latest.status : null,
+    };
+  });
 }
 
 /** Every currently-firing alert, most recently updated first. Unpaginated — the active-alert count is always small at this app's scale. */
@@ -146,5 +174,6 @@ export function getAlertDetail(db: DbClient, id: number): AlertDetail | null {
     triggers: triggers.map(toAlertTrigger),
     delegations: delegationRows.map(toDelegation),
     timeline: buildTimeline(triggers, delegationRows),
+    relatedEpisodes: getRelatedEpisodes(db, alert),
   };
 }

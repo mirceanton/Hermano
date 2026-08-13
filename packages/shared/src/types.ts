@@ -80,6 +80,8 @@ export interface AlertListItem {
   firstFiredAt: number | null;
   lastFiredAt: number | null;
   latestDelegation: LatestDelegationSummary | null;
+  /** How many episodes (this row included) share this fingerprint, active or resolved — 1 for an alert that has never recurred. */
+  episodeCount: number;
 }
 
 export interface TimelineEvent {
@@ -87,10 +89,21 @@ export interface TimelineEvent {
   label: string;
 }
 
+/** A different episode of the same fingerprint — used to link recurrences of the same underlying alert together on the detail page. */
+export interface RelatedEpisode {
+  id: number;
+  startsAt: number;
+  resolvedAt: number | null;
+  timesFired: number;
+  latestDelegationStatus: DelegationStatus | null;
+}
+
 export interface AlertDetail extends AlertListItem {
   triggers: AlertTrigger[];
   delegations: Delegation[];
   timeline: TimelineEvent[];
+  /** Other episodes of this same fingerprint, most recent first. */
+  relatedEpisodes: RelatedEpisode[];
 }
 
 export interface OverviewStats {
