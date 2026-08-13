@@ -1,5 +1,7 @@
+import type { AlertListItem } from "@hermano/shared"
 import { useState } from "react"
 import { useNavigate } from "react-router"
+import { RuleDialog } from "@/components/rule-dialog"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +16,7 @@ export function AlertsHistoryPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const [severity, setSeverity] = useState<SeverityFilter>("all")
+  const [forwardAlert, setForwardAlert] = useState<AlertListItem | null>(null)
 
   const { data, isPending } = useAlerts({ status: "resolved", page })
   const rows = data?.data ?? []
@@ -83,6 +86,9 @@ export function AlertsHistoryPage() {
                 <th className="px-3 py-2 font-medium">Fired</th>
                 <th className="px-3 py-2 font-medium">Resolved</th>
                 <th className="px-3 py-2 font-medium">Delegation</th>
+                <th className="px-3 py-2 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -108,6 +114,11 @@ export function AlertsHistoryPage() {
                   <td className="px-3 py-2">
                     {alert.latestDelegation ? <StatusBadge status={alert.latestDelegation.status} /> : "—"}
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setForwardAlert(alert)}>
+                      Forward this kind →
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -129,6 +140,15 @@ export function AlertsHistoryPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {forwardAlert && (
+        <RuleDialog
+          key={forwardAlert.id}
+          open
+          onOpenChange={(open) => !open && setForwardAlert(null)}
+          initial={{ name: `forward ${forwardAlert.alertName}`, matchers: { alertname: forwardAlert.alertName } }}
+        />
       )}
     </div>
   )
