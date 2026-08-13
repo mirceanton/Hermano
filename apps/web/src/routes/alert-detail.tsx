@@ -179,6 +179,42 @@ export function AlertDetailPage() {
         ))}
       </div>
 
+      {alert.relatedEpisodes.length > 0 && (
+        <>
+          <h2 className="mb-2 text-sm font-semibold text-muted-foreground uppercase">
+            Related episodes ({alert.relatedEpisodes.length})
+          </h2>
+          <p className="mb-2 text-sm text-muted-foreground">
+            This alert has fired, resolved, and fired again — each occurrence below is a separate episode of the
+            same underlying alert.
+          </p>
+          <div className="mb-6 rounded-xl border">
+            {alert.relatedEpisodes.map((ep) => (
+              <Link
+                key={ep.id}
+                to={`/alerts/${ep.id}`}
+                className="flex items-center justify-between gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/40"
+              >
+                <span className="flex items-center gap-2">
+                  <span title={formatExactTime(ep.startsAt)}>Started {formatRelativeTime(ep.startsAt)}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground">
+                    {ep.resolvedAt ? (
+                      <span title={formatExactTime(ep.resolvedAt)}>resolved {formatRelativeTime(ep.resolvedAt)}</span>
+                    ) : (
+                      "still active"
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground">{ep.timesFired}× fired</span>
+                </span>
+                {ep.latestDelegationStatus && <StatusBadge status={ep.latestDelegationStatus} />}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
       <h2 className="mb-2 text-sm font-semibold text-muted-foreground uppercase">Delegations ({alert.delegations.length})</h2>
       {alert.delegations.length === 0 ? (
         <p className="text-sm text-muted-foreground">This alert hasn't been delegated yet.</p>

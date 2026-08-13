@@ -19,7 +19,7 @@ Hermano deduplicates firing alerts by their Alertmanager fingerprint. A repeated
 
 ### Alert Archival on Resolution
 
-Once Alertmanager reports an alert as resolved, it's removed from the active list and a snapshot is kept in history for later reference.
+Once Alertmanager reports an alert as resolved, it's removed from the active list and a snapshot is kept in history for later reference. If the same fingerprint fires again later (a recurrence, e.g. a fix that didn't hold), that's a new episode rather than the same history entry — the history list flags it with a "recurring" badge, and each episode's detail page links to its sibling episodes so you can see the full recurrence chain.
 
 ![Alert history](.github/assets/alerts.png)
 
