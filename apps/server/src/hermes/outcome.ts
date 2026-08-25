@@ -71,6 +71,14 @@ function sleep(ms: number): Promise<void> {
  * deadlineAt passes (PollTimeoutError). An unrecognized status value is
  * treated the same as "still running" — forward-compatible: fail open
  * toward waiting, not misclassifying an unknown future status.
+ *
+ * This loop is the only retry layer for getRun: HermesClient.getRun()
+ * deliberately makes a single HTTP attempt per call (see its doc comment
+ * in client.ts) rather than retrying internally like createRun/stopRun do,
+ * specifically so a transient failure here costs exactly one
+ * pollIntervalMs wait — not an internal multi-attempt-plus-backoff chain
+ * that could burn well past pollIntervalMs before this loop gets to
+ * re-check opts.deadlineAt above.
  */
 export async function pollRun(
   client: HermesClientLike,

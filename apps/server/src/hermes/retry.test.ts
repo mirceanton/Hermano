@@ -56,4 +56,40 @@ describe("withRetry", () => {
     ).rejects.toThrow("always transient");
     expect(calls).toBe(3);
   });
+
+  it("stops retrying once deadlineAt has passed, even with attempt budget left", async () => {
+    let calls = 0;
+    const deadlineAt = Date.now() + 20;
+    await expect(
+      withRetry(
+        async () => {
+          calls++;
+          throw new Error("transient");
+        },
+        // Large backoff/attempts budget on paper, but deadlineAt is what should cut this short.
+        { attempts: 10, baseDelayMs: 1_000, maxDelayMs: 5_000, isRetryable: () => true, deadlineAt },
+      ),
+    ).rejects.toThrow("transient");
+    expect(calls).toBeLessThan(10);
+    expect(Date.now()).toBeLessThan(deadlineAt + 50);
+  });
+
+  it("shortens a backoff delay so it doesn't itself overshoot deadlineAt", async () => {
+    let calls = 0;
+    const start = Date.now();
+    const deadlineAt = start + 30;
+    await expect(
+      withRetry(
+        async () => {
+          calls++;
+          throw new Error("transient");
+        },
+        // baseDelayMs (5000) would blow way past a 30ms deadline if not capped.
+        { attempts: 5, baseDelayMs: 5_000, maxDelayMs: 5_000, isRetryable: () => true, deadlineAt },
+      ),
+    ).rejects.toThrow("transient");
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(100);
+    expect(calls).toBeGreaterThanOrEqual(1);
+  });
 });
