@@ -17,6 +17,7 @@ const STATUS_FILTERS: Array<{ label: string; value: DelegationStatus | "all" }> 
   { label: "Completed", value: "completed" },
   { label: "Failed", value: "failed" },
   { label: "Timed out", value: "timed_out" },
+  { label: "Cancelled", value: "cancelled" },
 ]
 
 function DelegationLogDialog({ entry, onClose }: { entry: DelegationLogEntry; onClose: () => void }) {

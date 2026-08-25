@@ -6,8 +6,8 @@ import { alerts, delegations, type AlertRow } from "../db/schema.js";
 import type { HermesClientLike, HermesRun } from "../hermes/client.js";
 import { HermesApiError } from "../hermes/client.js";
 import { updateSettingsRow } from "../settings/queries.js";
-import { dispatch, dispatchWithEffectiveConfig, startSweeper } from "./delegate.js";
-import { getLatestDelegation } from "./queries.js";
+import { cancelDelegation, cancelDelegationWithEffectiveConfig, dispatch, dispatchWithEffectiveConfig, startSweeper } from "./delegate.js";
+import { getLatestDelegation, markDispatched, NoCancellableDelegationError } from "./queries.js";
 
 const BASE_ENV = { HERMANO_DATABASE_PATH: "/data/hermano.sqlite3" };
 
@@ -141,6 +141,101 @@ describe("dispatch", () => {
 
     await waitForStatus(db, alert.id, "failed");
     expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ id: alert.id }), "failed", expect.any(String));
+  });
+});
+
+describe("cancelDelegation", () => {
+  async function createDispatchedAlert(db: Db, fingerprint: string, runId = "run-1"): Promise<AlertRow> {
+    const alert = createPendingAlert(db, fingerprint);
+    markDispatched(db, alert.id, runId);
+    return alert;
+  }
+
+  it("stops the run and marks the delegation cancelled", async () => {
+    const db = createTestDb();
+    const alert = await createDispatchedAlert(db, "fp1");
+    const stopRun = vi.fn(async () => {});
+    const client = fakeClient({ stopRun });
+
+    await cancelDelegation(db, client, alert.id);
+
+    expect(stopRun).toHaveBeenCalledWith("run-1");
+    const latest = getLatestDelegation(db, alert.id);
+    expect(latest?.status).toBe("cancelled");
+    expect(latest?.summary).toBe("cancelled by user");
+    expect(latest?.completedAt).toBeInstanceOf(Date);
+  });
+
+  it("still marks the delegation cancelled when stopRun fails (best-effort)", async () => {
+    const db = createTestDb();
+    const alert = await createDispatchedAlert(db, "fp1");
+    const client = fakeClient({
+      stopRun: vi.fn(async () => {
+        throw new Error("hermes unreachable");
+      }),
+    });
+
+    await cancelDelegation(db, client, alert.id);
+
+    const latest = getLatestDelegation(db, alert.id);
+    expect(latest?.status).toBe("cancelled");
+  });
+
+  it("throws NoCancellableDelegationError and never calls stopRun when there's no dispatched delegation", async () => {
+    const db = createTestDb();
+    const alert = createPendingAlert(db, "fp1"); // still "pending", never dispatched
+    const stopRun = vi.fn(async () => {});
+    const client = fakeClient({ stopRun });
+
+    await expect(cancelDelegation(db, client, alert.id)).rejects.toBeInstanceOf(NoCancellableDelegationError);
+    expect(stopRun).not.toHaveBeenCalled();
+    expect(getLatestDelegation(db, alert.id)?.status).toBe("pending");
+  });
+
+  it("throws NoCancellableDelegationError for an alert that was never delegated at all", async () => {
+    const db = createTestDb();
+    const now = new Date();
+    const alert = db
+      .insert(alerts)
+      .values({
+        fingerprint: "fp2",
+        alertName: "TestAlert",
+        severity: "critical",
+        labels: {},
+        annotations: {},
+        generatorUrl: "",
+        startsAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+
+    await expect(cancelDelegation(db, fakeClient({}), alert.id)).rejects.toBeInstanceOf(NoCancellableDelegationError);
+  });
+});
+
+describe("cancelDelegationWithEffectiveConfig", () => {
+  it("cancels against the Settings-page-configured agent URL when no env var is set", async () => {
+    const db = createTestDb();
+    const alert = createPendingAlert(db, "fp1");
+    markDispatched(db, alert.id, "run-1");
+    updateSettingsRow(db, { hermesAgentUrl: "http://settings-configured.test" });
+
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    try {
+      const config = loadConfig(BASE_ENV);
+      await cancelDelegationWithEffectiveConfig(db, config, alert.id);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://settings-configured.test/v1/runs/run-1/stop",
+        expect.anything(),
+      );
+      expect(getLatestDelegation(db, alert.id)?.status).toBe("cancelled");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDuration, formatExactTime, formatRelativeTime, formatTokenUsage } from "@/lib/format"
-import { useAlert, useDelegateAlert } from "@/lib/queries"
+import { useAlert, useCancelDelegation, useDelegateAlert } from "@/lib/queries"
 import { severityTextClass } from "@/lib/severity"
 
 function DelegationDialog({ delegation, alertName, onClose }: { delegation: Delegation; alertName: string; onClose: () => void }) {
@@ -81,6 +81,7 @@ export function AlertDetailPage() {
   const alertId = Number(id)
   const { data: alert, isPending } = useAlert(alertId)
   const delegateNow = useDelegateAlert(alertId)
+  const cancelDelegation = useCancelDelegation(alertId)
   const [openDelegation, setOpenDelegation] = useState<Delegation | null>(null)
 
   if (isPending) {
@@ -119,9 +120,23 @@ export function AlertDetailPage() {
           </div>
         </div>
 
-        {canDelegate && (
+        {canDelegate && status === "dispatched" && (
+          <Button
+            variant="destructive"
+            disabled={cancelDelegation.isPending}
+            onClick={() => {
+              if (window.confirm("Cancel this in-progress delegation? The running Hermes agent will be stopped.")) {
+                cancelDelegation.mutate()
+              }
+            }}
+          >
+            Cancel
+          </Button>
+        )}
+
+        {canDelegate && status !== "dispatched" && (
           <Button disabled={delegateNow.isPending} onClick={() => delegateNow.mutate()}>
-            {status === "failed" || status === "timed_out" ? "Retry" : status ? "Delegate again" : "Delegate now"}
+            {status === "failed" || status === "timed_out" || status === "cancelled" ? "Retry" : status ? "Delegate again" : "Delegate now"}
           </Button>
         )}
       </div>

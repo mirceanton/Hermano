@@ -1,6 +1,6 @@
 import type { LabelMap } from "./label-map.js";
 
-export type DelegationStatus = "pending" | "dispatched" | "completed" | "failed" | "timed_out";
+export type DelegationStatus = "pending" | "dispatched" | "completed" | "failed" | "timed_out" | "cancelled";
 
 export interface RuleSnapshot {
   name: string;

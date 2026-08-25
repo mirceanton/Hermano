@@ -88,7 +88,7 @@ function AlertCard({ alert, onForwardKind }: { alert: AlertListItem; onForwardKi
             Delegate now
           </Button>
         )}
-        {(status === "failed" || status === "timed_out") && (
+        {(status === "failed" || status === "timed_out" || status === "cancelled") && (
           <Button type="button" size="sm" disabled={delegateNow.isPending} onClick={() => delegateNow.mutate()}>
             Retry
           </Button>

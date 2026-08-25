@@ -18,7 +18,7 @@ function getOverviewStats(db: DbClient): OverviewStats {
   const failed = db
     .select({ value: count() })
     .from(delegations)
-    .where(inArray(delegations.status, ["failed", "timed_out"]))
+    .where(inArray(delegations.status, ["failed", "timed_out", "cancelled"]))
     .get()!.value;
 
   const totalTokens = Number(db.select({ value: sum(delegations.totalTokens) }).from(delegations).get()?.value ?? 0);
@@ -41,7 +41,7 @@ function getOverviewStats(db: DbClient): OverviewStats {
     const latest = getLatestDelegation(db, alert.id);
     if (!latest) {
       undelegatedActive++;
-    } else if (latest.status === "failed" || latest.status === "timed_out") {
+    } else if (latest.status === "failed" || latest.status === "timed_out" || latest.status === "cancelled") {
       failedActive++;
     }
   }

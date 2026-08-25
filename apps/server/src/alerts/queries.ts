@@ -155,6 +155,8 @@ function delegationLabel(status: DelegationRow["status"]): string {
       return "failed";
     case "timed_out":
       return "timed out";
+    case "cancelled":
+      return "cancelled";
   }
 }
 

@@ -7,9 +7,12 @@ import { notifyDelegationOutcome } from "../pushover/notify.js";
 import { effectiveHermesConfig, effectiveSystemPrompt } from "../settings/effective.js";
 import { getSettingsRow } from "../settings/queries.js";
 import {
+  cancelDispatchedDelegation,
   countAlertTriggers,
+  getLatestDelegation,
   markDispatchFailed,
   markDispatched,
+  NoCancellableDelegationError,
   recordDelegationOutcome,
   sweepStaleDelegations,
 } from "./queries.js";
@@ -78,6 +81,45 @@ export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alerts
       });
     },
   });
+}
+
+/**
+ * Cancels an alert's currently-dispatched delegation: best-effort stops the
+ * underlying Hermes run, then unconditionally marks the delegation
+ * "cancelled" regardless of whether that stop actually succeeded — mirrors
+ * dispatchOne's own handling of the dispatch-timeout path, where stopRun is
+ * likewise best-effort and never blocks recording the outcome. The operator
+ * clicking Cancel means "stop tracking/paging for this run," which a failed
+ * remote stop shouldn't get in the way of. Throws NoCancellableDelegationError
+ * if the alert's latest delegation isn't currently "dispatched" (nothing to
+ * cancel) — callers map that to a 409.
+ */
+export async function cancelDelegation(db: DbClient, client: HermesClientLike, alertId: number): Promise<void> {
+  const delegation = getLatestDelegation(db, alertId);
+  if (!delegation || delegation.status !== "dispatched" || !delegation.runId) {
+    throw new NoCancellableDelegationError();
+  }
+
+  const runId = delegation.runId;
+  await withTimeout(client.stopRun(runId), STOP_RUN_TIMEOUT_MS, "hermes: stop-run timed out").catch((err) => {
+    console.warn(`delegate: failed to stop hermes run ${runId} while cancelling`, err);
+  });
+
+  cancelDispatchedDelegation(db, alertId, "cancelled by user");
+}
+
+/**
+ * The entry point route handlers actually call for cancellation — resolves
+ * the current effective Hermes config the same way dispatchWithEffectiveConfig
+ * does, builds a HermesClient from it, and hands off to cancelDelegation()
+ * above (kept separately injectable-client for direct unit testing with a
+ * fake client).
+ */
+export function cancelDelegationWithEffectiveConfig(db: DbClient, config: Config, alertId: number): Promise<void> {
+  const settings = getSettingsRow(db);
+  const hermes = effectiveHermesConfig(config, settings);
+  const client = new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
+  return cancelDelegation(db, client, alertId);
 }
 
 async function dispatchOne(db: DbClient, client: HermesClientLike, alert: AlertRow, opts: DispatchOptions): Promise<void> {

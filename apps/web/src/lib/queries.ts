@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { LabelMap, SettingsUpdateInput } from "@hermano/shared"
 import {
+  cancelDelegation,
   createRule,
   delegateAlert,
   deleteRule,
@@ -76,6 +77,14 @@ export function useDelegateAlert(id: number) {
   const invalidate = useInvalidateAlert(id)
   return useMutation({
     mutationFn: () => delegateAlert(id),
+    onSuccess: invalidate,
+  })
+}
+
+export function useCancelDelegation(id: number) {
+  const invalidate = useInvalidateAlert(id)
+  return useMutation({
+    mutationFn: () => cancelDelegation(id),
     onSuccess: invalidate,
   })
 }
