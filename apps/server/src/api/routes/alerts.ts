@@ -3,8 +3,8 @@ import type { AlertDetail, AlertListItem, Paginated } from "@hermano/shared";
 import { getAlertById, getAlertDetail, HISTORY_PAGE_SIZE, listActiveAlerts, listResolvedAlerts } from "../../alerts/queries.js";
 import type { Config } from "../../config.js";
 import type { DbClient } from "../../db/client.js";
-import { dispatchWithEffectiveConfig } from "../../delegate/delegate.js";
-import { AlertNotFoundError, DelegationInFlightError, markManualDelegation } from "../../delegate/queries.js";
+import { cancelDelegationWithEffectiveConfig, dispatchWithEffectiveConfig } from "../../delegate/delegate.js";
+import { AlertNotFoundError, DelegationInFlightError, markManualDelegation, NoCancellableDelegationError } from "../../delegate/queries.js";
 
 export function registerAlertRoutes(app: FastifyInstance, db: DbClient, config: Config): void {
   app.get<{ Querystring: { status?: string; page?: string } }>("/api/alerts", async (request): Promise<Paginated<AlertListItem>> => {
@@ -52,6 +52,27 @@ export function registerAlertRoutes(app: FastifyInstance, db: DbClient, config: 
       }
       if (err instanceof DelegationInFlightError) {
         reply.code(409).send({ error: "delegation already in flight for this alert" });
+        return;
+      }
+      throw err;
+    }
+
+    return getAlertDetail(db, id)! satisfies AlertDetail;
+  });
+
+  app.post<{ Params: { id: string } }>("/api/alerts/:id/delegation/cancel", async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    const alert = getAlertById(db, id);
+    if (!alert) {
+      reply.code(404).send({ error: "alert not found" });
+      return;
+    }
+
+    try {
+      await cancelDelegationWithEffectiveConfig(db, config, id);
+    } catch (err) {
+      if (err instanceof NoCancellableDelegationError) {
+        reply.code(409).send({ error: "no dispatched delegation to cancel" });
         return;
       }
       throw err;

@@ -86,7 +86,7 @@ export const delegations = sqliteTable(
     ruleId: integer("rule_id").references(() => delegationRules.id, { onDelete: "set null" }),
     ruleSnapshot: text("rule_snapshot", { mode: "json" }).$type<RuleSnapshot>().notNull(),
     status: text("status", {
-      enum: ["pending", "dispatched", "completed", "failed", "timed_out"],
+      enum: ["pending", "dispatched", "completed", "failed", "timed_out", "cancelled"],
     })
       .$type<DelegationStatus>()
       .notNull(),

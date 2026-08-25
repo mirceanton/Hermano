@@ -23,6 +23,13 @@ export class DelegationInFlightError extends Error {
   }
 }
 
+export class NoCancellableDelegationError extends Error {
+  constructor() {
+    super("no dispatched delegation to cancel");
+    this.name = "NoCancellableDelegationError";
+  }
+}
+
 export function countAlertTriggers(db: DbClient, alertId: number): number {
   const row = db.select({ value: count() }).from(alertTriggers).where(eq(alertTriggers.alertId, alertId)).get();
   return row?.value ?? 0;
@@ -137,6 +144,26 @@ export function recordDelegationOutcome(
     .returning()
     .all();
   return rows.length > 0;
+}
+
+/**
+ * Atomically transitions the alert's dispatched delegation to "cancelled" —
+ * mirrors recordDelegationOutcome's WHERE-guarded update so a race with the
+ * dispatch worker's own poll-loop resolving the run first (e.g. it finishes
+ * right as the operator clicks Cancel) is handled safely: zero rows matched
+ * means there's nothing left to cancel, surfaced as NoCancellableDelegationError
+ * rather than silently succeeding or crashing.
+ */
+export function cancelDispatchedDelegation(db: DbClient, alertId: number, summary: string): DelegationRow {
+  const rows = db
+    .update(delegations)
+    .set({ status: "cancelled", summary, completedAt: new Date() })
+    .where(and(eq(delegations.alertId, alertId), eq(delegations.status, "dispatched")))
+    .returning()
+    .all();
+  const row = rows[0];
+  if (!row) throw new NoCancellableDelegationError();
+  return row;
 }
 
 export const DELEGATIONS_PAGE_SIZE = 25;
