@@ -45,6 +45,23 @@ async function main(): Promise<void> {
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
+
+  // Graceful shutdown: stop accepting new connections and run onClose hooks
+  // (including the sweeper above) before exiting. In-flight dispatchOne
+  // workers (see delegate.ts) are not awaited here — they poll a Hermes run
+  // to completion with no cancellation hook, so waiting on them would need
+  // its own bounded grace period; the sweeper's crash-recovery sweep on next
+  // boot already resolves any delegation abandoned mid-flight. A repeated
+  // signal while shutdown is already in progress is a no-op.
+  let shuttingDown = false;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      app.log.info(`received ${signal}, shutting down gracefully`);
+      app.close().then(() => process.exit(0));
+    });
+  }
 }
 
 main().catch((err) => {
