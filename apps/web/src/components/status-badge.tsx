@@ -8,6 +8,7 @@ const VARIANT: Record<DelegationStatus, "outline" | "default" | "destructive"> =
   completed: "default",
   failed: "destructive",
   timed_out: "destructive",
+  cancelled: "outline",
 }
 
 const LABEL: Record<DelegationStatus, string> = {
@@ -16,13 +17,14 @@ const LABEL: Record<DelegationStatus, string> = {
   completed: "completed",
   failed: "failed",
   timed_out: "timed out",
+  cancelled: "cancelled",
 }
 
 export function StatusBadge({ status, className }: { status: DelegationStatus; className?: string }) {
   return (
     <Badge
       variant={VARIANT[status]}
-      className={cn(status === "timed_out" && "ring-1 ring-destructive/40", className)}
+      className={cn((status === "timed_out" || status === "cancelled") && "ring-1 ring-destructive/40", className)}
     >
       {LABEL[status]}
     </Badge>

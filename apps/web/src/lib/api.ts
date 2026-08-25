@@ -46,6 +46,10 @@ export function delegateAlert(id: number): Promise<AlertDetail> {
   return request<AlertDetail>(`/api/alerts/${id}/delegate`, { method: "POST" })
 }
 
+export function cancelDelegation(id: number): Promise<AlertDetail> {
+  return request<AlertDetail>(`/api/alerts/${id}/delegation/cancel`, { method: "POST" })
+}
+
 export interface DelegationFilters {
   page?: number
 }
