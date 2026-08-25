@@ -1,5 +1,6 @@
 import type { AlertRow } from "../db/schema.js";
 import { RUN_INSTRUCTIONS, buildInput } from "./prompt.js";
+import { withRetry } from "./retry.js";
 
 /** Thrown for any non-2xx HTTP response. statusCode lets callers distinguish "will never succeed by retrying" (4xx) from transient (5xx). */
 export class HermesApiError extends Error {
@@ -11,6 +12,27 @@ export class HermesApiError extends Error {
     this.name = "HermesApiError";
   }
 }
+
+/** Reports whether a failed Hermes call is worth retrying: 5xx/network/timeout errors might be transient, but 4xx (HermesApiError with statusCode < 500) won't resolve by retrying. */
+export function isRetryableError(err: unknown): boolean {
+  if (err instanceof HermesApiError) {
+    return err.statusCode >= 500;
+  }
+  return true;
+}
+
+/**
+ * Attempts (including the first) for a single Hermes HTTP call before
+ * giving up — only likely-transient failures are retried at all (see
+ * isRetryableError); a 4xx never reaches a second attempt. Backoff between
+ * attempts is deliberately short (low hundreds of ms, capped at a couple
+ * seconds): callers wrap this whole client in their own outer timeout
+ * (CREATE_RUN_TIMEOUT_MS et al in delegate.ts), so retries need to fit
+ * inside that existing budget rather than extend it.
+ */
+const REQUEST_RETRY_ATTEMPTS = 3;
+const REQUEST_RETRY_BASE_DELAY_MS = 200;
+const REQUEST_RETRY_MAX_DELAY_MS = 2_000;
 
 export interface HermesUsage {
   inputTokens: number;
@@ -56,21 +78,32 @@ export class HermesClient {
     return this.baseUrl !== "";
   }
 
+  /** Retries transient failures (network errors, timeouts, 5xx) with a short exponential backoff — see isRetryableError and the REQUEST_RETRY_* constants above. A 4xx (HermesApiError, statusCode < 500) is rethrown from the first attempt without retrying. */
   private async request(path: string, init: RequestInit): Promise<Response> {
-    const headers = new Headers(init.headers);
-    if (this.apiKey) {
-      headers.set("Authorization", `Bearer ${this.apiKey}`);
-    }
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
-    });
-    if (!res.ok) {
-      const body = (await res.text().catch(() => "")).slice(0, 2048);
-      throw new HermesApiError(res.status, body);
-    }
-    return res;
+    return withRetry(
+      async () => {
+        const headers = new Headers(init.headers);
+        if (this.apiKey) {
+          headers.set("Authorization", `Bearer ${this.apiKey}`);
+        }
+        const res = await fetch(`${this.baseUrl}${path}`, {
+          ...init,
+          headers,
+          signal: AbortSignal.timeout(this.requestTimeoutMs),
+        });
+        if (!res.ok) {
+          const body = (await res.text().catch(() => "")).slice(0, 2048);
+          throw new HermesApiError(res.status, body);
+        }
+        return res;
+      },
+      {
+        attempts: REQUEST_RETRY_ATTEMPTS,
+        baseDelayMs: REQUEST_RETRY_BASE_DELAY_MS,
+        maxDelayMs: REQUEST_RETRY_MAX_DELAY_MS,
+        isRetryable: isRetryableError,
+      },
+    );
   }
 
   /**

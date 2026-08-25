@@ -1,4 +1,6 @@
-import { HermesApiError, type HermesClientLike, type HermesUsage } from "./client.js";
+import { isRetryableError, type HermesClientLike, type HermesUsage } from "./client.js";
+
+export { isRetryableError };
 
 export interface ParsedOutcome {
   status: "completed" | "failed";
@@ -46,14 +48,6 @@ export function parseOutcome(output: string): ParsedOutcome {
       "agent finished without a STATUS marker anywhere in its response (prompt-compliance issue) - full output:\n" +
       output.trim(),
   };
-}
-
-/** Reports whether a poll error is worth waiting out and retrying: 5xx/network errors might be Hermes restarting, but 4xx won't resolve by waiting. */
-export function isRetryableError(err: unknown): boolean {
-  if (err instanceof HermesApiError) {
-    return err.statusCode >= 500;
-  }
-  return true;
 }
 
 export class PollTimeoutError extends Error {
