@@ -4,6 +4,7 @@ import { loadConfig, type Config } from "./config.js";
 import { createDbClient } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { startSweeper } from "./delegate/delegate.js";
+import { startReconciler } from "./reconcile/reconcile.js";
 import { effectiveOidcConfig } from "./settings/effective.js";
 import { ensureSessionSecret, getSettingsRow } from "./settings/queries.js";
 
@@ -38,10 +39,17 @@ async function main(): Promise<void> {
       ? `Hermes dispatch enabled (${config.hermes.baseUrl})`
       : "Hermes dispatch is not configured via environment — check the Settings page",
   );
+  app.log.info(
+    config.alertmanager.baseUrl !== ""
+      ? `Alertmanager reconciliation enabled (${config.alertmanager.baseUrl}, every ${config.alertmanager.reconcileIntervalMs}ms)`
+      : "Alertmanager reconciliation is not configured (HERMANO_ALERTMANAGER_URL unset) — resolved alerts rely solely on webhook delivery",
+  );
 
   const stopSweeper = startSweeper(db, runtimeConfig);
+  const stopReconciler = startReconciler(db, runtimeConfig);
   app.addHook("onClose", async () => {
     stopSweeper();
+    stopReconciler();
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });

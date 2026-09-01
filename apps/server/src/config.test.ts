@@ -21,6 +21,10 @@ describe("loadConfig", () => {
       userKey: undefined,
       notifyOnCompleted: false,
     });
+    expect(config.alertmanager).toEqual({
+      baseUrl: "",
+      reconcileIntervalMs: 5 * 60_000,
+    });
     expect(config.logLevel).toBe("info");
     expect(config.staticWebDir).toBeNull();
     expect(config.publicUrl).toBe(config.webBaseUrl);
@@ -54,6 +58,8 @@ describe("loadConfig", () => {
       HERMANO_PUSHOVER_API_TOKEN: "app-token",
       HERMANO_PUSHOVER_USER_KEY: "user-key",
       HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED: "true",
+      HERMANO_ALERTMANAGER_URL: "http://alertmanager.internal:9093",
+      HERMANO_ALERTMANAGER_RECONCILE_INTERVAL_MS: "120000",
       HERMANO_PUBLIC_URL: "https://hermano.example.com",
       LOG_LEVEL: "debug",
     });
@@ -69,6 +75,10 @@ describe("loadConfig", () => {
       apiToken: "app-token",
       userKey: "user-key",
       notifyOnCompleted: true,
+    });
+    expect(config.alertmanager).toEqual({
+      baseUrl: "http://alertmanager.internal:9093",
+      reconcileIntervalMs: 120_000,
     });
     expect(config.logLevel).toBe("debug");
     expect(config.publicUrl).toBe("https://hermano.example.com");
