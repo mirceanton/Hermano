@@ -28,8 +28,14 @@ export function registerAuthRoutes(app: FastifyInstance, db: DbClient, config: C
   if (!config.oidc) return;
   const oidcConfig = config.oidc;
 
-  app.get("/auth/login", async (_request, reply) => {
-    const oidc = getOidcClient();
+  app.get("/auth/login", async (request, reply) => {
+    let oidc: client.Configuration;
+    try {
+      oidc = getOidcClient();
+    } catch (err) {
+      request.log.error(err, "OIDC login attempted before discovery completed");
+      return reply.code(503).send({ error: "login temporarily unavailable" });
+    }
     const codeVerifier = client.randomPKCECodeVerifier();
     const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
     const state = client.randomState();

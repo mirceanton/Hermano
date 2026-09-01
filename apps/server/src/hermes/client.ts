@@ -1,6 +1,6 @@
 import type { AlertRow } from "../db/schema.js";
 import { RUN_INSTRUCTIONS, buildInput } from "./prompt.js";
-import { withRetry } from "./retry.js";
+import { withRetry } from "../lib/retry.js";
 
 /** Thrown for any non-2xx HTTP response. statusCode lets callers distinguish "will never succeed by retrying" (4xx) from transient (5xx). */
 export class HermesApiError extends Error {

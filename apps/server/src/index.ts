@@ -26,13 +26,19 @@ async function main(): Promise<void> {
     sessionSecret: config.sessionSecret ?? ensureSessionSecret(db),
   };
 
-  if (runtimeConfig.oidc) {
-    await initOidcClient(runtimeConfig.oidc);
-  }
-
+  // Built before OIDC discovery below so a boot-time discovery failure
+  // (see initOidcClient) still leaves a working app.log to report through
+  // and, more importantly, a server that comes up regardless — discovery
+  // failing must never take alert ingestion and the dashboard down with it.
   const app = buildApp(db, runtimeConfig);
+
+  const oidcReady = runtimeConfig.oidc ? await initOidcClient(runtimeConfig.oidc, app.log) : false;
   app.log.info(
-    runtimeConfig.oidc ? `OIDC auth enabled (issuer: ${runtimeConfig.oidc.issuerUrl})` : "single-user mode (no OIDC configured)",
+    !runtimeConfig.oidc
+      ? "single-user mode (no OIDC configured)"
+      : oidcReady
+        ? `OIDC auth enabled (issuer: ${runtimeConfig.oidc.issuerUrl})`
+        : `OIDC auth configured (issuer: ${runtimeConfig.oidc.issuerUrl}) but discovery did not complete — login is unavailable until the next restart`,
   );
   app.log.info(
     config.hermes.baseUrl !== ""
