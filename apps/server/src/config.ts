@@ -10,6 +10,11 @@ const envSchema = z.object({
   HERMANO_HERMES_AGENT_API_KEY: z.string().min(1).optional(),
   HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30 * 60_000),
   HERMANO_HERMES_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(3_000),
+  // Alertmanager's own read API (not the webhook). Leave unset to disable
+  // the reconciliation backstop entirely and rely solely on webhook
+  // delivery, same as before this existed.
+  HERMANO_ALERTMANAGER_URL: z.string().url().optional(),
+  HERMANO_ALERTMANAGER_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   // Absolute path to the built web SPA (apps/web/dist). When set, this
   // server also serves the SPA (with client-side-routing fallback) at `/`.
@@ -54,6 +59,13 @@ export interface PushoverConfig {
   notifyOnCompleted: boolean;
 }
 
+export interface AlertmanagerConfig {
+  /** Alertmanager's API root, e.g. "http://alertmanager.monitoring.svc.cluster.local:9093" — no trailing slash or path. Empty string (the default) disables the reconciliation job entirely, same "unset" convention as HermesConfig.baseUrl. */
+  baseUrl: string;
+  /** How often the reconciliation job polls GET /api/v2/alerts — see reconcile/reconcile.ts. */
+  reconcileIntervalMs: number;
+}
+
 /**
  * Which settings-page fields are locked to their env var value. A field is
  * locked purely based on whether its own env var is *present*, independent
@@ -80,6 +92,7 @@ export type Config = {
   webhookSharedSecret: string | null;
   hermes: HermesConfig;
   pushover: PushoverConfig;
+  alertmanager: AlertmanagerConfig;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   webBaseUrl: string;
   /** The externally-reachable origin used to build dashboard links (see HERMANO_PUBLIC_URL). Falls back to webBaseUrl when unset. */
@@ -144,6 +157,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       apiToken: parsed.HERMANO_PUSHOVER_API_TOKEN,
       userKey: parsed.HERMANO_PUSHOVER_USER_KEY,
       notifyOnCompleted: parsed.HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED === "true",
+    },
+    alertmanager: {
+      baseUrl: parsed.HERMANO_ALERTMANAGER_URL ?? "",
+      reconcileIntervalMs: parsed.HERMANO_ALERTMANAGER_RECONCILE_INTERVAL_MS,
     },
     logLevel: parsed.LOG_LEVEL,
     webBaseUrl,

@@ -17,6 +17,12 @@ services:
       # HERMANO_HERMES_AGENT_URL: http://hermes-api.ai.svc.cluster.local:8642
       # HERMANO_HERMES_AGENT_API_KEY: changeme
 
+      # Alertmanager's read API — leave unset to rely solely on webhook
+      # delivery for resolving alerts. When set, Hermano periodically
+      # reconciles its active alerts against GET /api/v2/alerts so a single
+      # dropped "resolved" webhook can't leave an alert stuck firing forever.
+      # HERMANO_ALERTMANAGER_URL: http://alertmanager.monitoring.svc.cluster.local:9093
+
       # OIDC login (Authelia, Authentik, Keycloak, etc.). Leave unset for
       # single-user mode (no login screen). If set, all three below plus
       # SESSION_SECRET are required — see apps/server/.env.example.

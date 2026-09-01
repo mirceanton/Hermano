@@ -21,6 +21,8 @@ Hermano deduplicates firing alerts by their Alertmanager fingerprint. A repeated
 
 Once Alertmanager reports an alert as resolved, it's removed from the active list and a snapshot is kept in history for later reference. If the same fingerprint fires again later (a recurrence, e.g. a fix that didn't hold), that's a new episode rather than the same history entry — the history list flags it with a "recurring" badge, and each episode's detail page links to its sibling episodes so you can see the full recurrence chain.
 
+Resolution normally rides in on Alertmanager's own `resolved` webhook, but that's just one delivery — if it's ever lost (Hermano crashing/restarting at the wrong moment, a network blip), the alert would otherwise stay active forever even though the underlying issue is long gone. When `HERMANO_ALERTMANAGER_URL` is set, a periodic reconciliation job double-checks every locally-active alert against Alertmanager's own `GET /api/v2/alerts` and resolves anything Alertmanager no longer lists, capping the maximum staleness at one reconciliation interval instead of depending on that single webhook delivery.
+
 ![Alert history](.github/assets/alerts.png)
 
 ### Delegation rules
@@ -49,13 +51,15 @@ All configuration options are exposed via environment variables — see `apps/se
 | `HERMANO_HERMES_AGENT_API_KEY` | *(unset)* | Bearer token for that API (Hermes' configured `API_SERVER_KEY`), if it requires one |
 | `HERMANO_HERMES_AGENT_DISPATCH_TIMEOUT_MS` | `1800000` (30m) | How long to poll a dispatched Hermes run before giving up and marking it `timed_out` (the run is also told to stop) |
 | `HERMANO_HERMES_POLL_INTERVAL_MS` | `3000` | How often to poll a dispatched run's status |
+| `HERMANO_ALERTMANAGER_URL` | *(unset = disabled)* | Alertmanager's own API root, e.g. `http://alertmanager.monitoring.svc.cluster.local:9093`. Unset = alerts are resolved solely via webhook delivery; set = a periodic job also reconciles against Alertmanager's live alert list — see [Alert Archival on Resolution](#alert-archival-on-resolution) |
+| `HERMANO_ALERTMANAGER_RECONCILE_INTERVAL_MS` | `300000` (5m) | How often the reconciliation job above polls Alertmanager |
 | `STATIC_WEB_DIR` | *(unset)* | Absolute path to the built web SPA — set in production so this same process serves both the API and the frontend |
 | `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URL` / `SESSION_SECRET` | *(unset = single-user mode)* | Gate the dashboard behind OIDC login (Authelia, Authentik, Keycloak, ...). If any of the first three is set, all three plus `SESSION_SECRET` (32+ chars) are required |
 | `HERMANO_PUSHOVER_API_TOKEN` / `HERMANO_PUSHOVER_USER_KEY` | *(unset = disabled)* | [Pushover](https://pushover.net) application token and user/group key. Leave both unset to disable notifications entirely |
 | `HERMANO_PUSHOVER_NOTIFY_ON_COMPLETED` | `false` | Whether a successful fix also sends a (low-priority) Pushover notification — see [Notifying you via Pushover](#notifying-you-via-pushover) |
 | `LOG_LEVEL` | `info` | `fatal` / `error` / `warn` / `info` / `debug` / `trace` |
 
-All of the above except `HERMANO_DATABASE_PATH`/`HERMANO_PORT`/`STATIC_WEB_DIR`/`LOG_LEVEL` (and `OIDC_*`, which requires a restart) are also editable from the in-app Settings page — an environment variable, when set, always takes priority over whatever's saved there.
+All of the above except `HERMANO_DATABASE_PATH`/`HERMANO_PORT`/`STATIC_WEB_DIR`/`LOG_LEVEL`/`HERMANO_WEBHOOK_SHARED_SECRET`/`HERMANO_ALERTMANAGER_URL`/`HERMANO_ALERTMANAGER_RECONCILE_INTERVAL_MS` (and `OIDC_*`, which requires a restart) are also editable from the in-app Settings page — an environment variable, when set, always takes priority over whatever's saved there.
 
 ![Settings page](.github/assets/settings.png)
 
@@ -75,7 +79,7 @@ receivers:
         #     credentials: <the shared secret>
 ```
 
-`send_resolved: true` is important. Without it, resolved alerts never get removed from the active list.
+`send_resolved: true` is important. Without it, resolved alerts never get removed from the active list — and even with it, that's a single webhook delivery that can be lost, so also set `HERMANO_ALERTMANAGER_URL` if you want Hermano to catch that case itself (see [Alert Archival on Resolution](#alert-archival-on-resolution)).
 
 ## Delegating to Hermes
 
