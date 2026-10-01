@@ -51,6 +51,7 @@ function DelegationLogDialog({ entry, onClose }: { entry: DelegationLogEntry; on
               ))}
             </div>
           )}
+          {entry.rule.profile && <p className="mt-1.5 text-sm text-muted-foreground">Hermes profile: {entry.rule.profile}</p>}
           {entry.rule.name !== "manual" && (
             <p className="mt-1 text-xs text-muted-foreground">
               Snapshotted at the time this delegation was created — the rule may have since been renamed, edited, or deleted.
@@ -169,6 +170,7 @@ export function DelegationsPage() {
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {entry.rule.name === "manual" ? "Manual" : entry.rule.name}
+                    {entry.rule.profile && <div className="text-xs">→ {entry.rule.profile}</div>}
                   </td>
                   <td className="px-3 py-2">
                     <StatusBadge status={entry.status} />

@@ -6,6 +6,37 @@ export interface RuleSnapshot {
   name: string;
   /** Absent for "manual" delegations (operator-triggered, not caused by any rule). */
   matchers?: LabelMap;
+  /** Name of the Hermes profile this delegation was routed to, frozen at match time. Absent when it went to the default Hermes endpoint (Settings → Hermes Agent). */
+  profile?: string;
+}
+
+/**
+ * A named Hermes endpoint a delegation rule can route to — e.g. one Hermes
+ * profile's own api_server (its own port and API_SERVER_KEY), or a profile
+ * under a multiplexed gateway's /p/<profile> URL prefix. Rules with no
+ * profile use the default endpoint configured under Settings → Hermes Agent.
+ */
+export interface HermesProfile {
+  id: number;
+  name: string;
+  url: string;
+  /** Never the actual key — just whether one is configured for this profile. */
+  apiKeySet: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HermesProfileCreateInput {
+  name: string;
+  url: string;
+  apiKey?: string | null;
+}
+
+export interface HermesProfileUpdateInput {
+  name?: string;
+  url?: string;
+  /** A new key to store, or null to clear the stored one. Omit to keep it as is. */
+  apiKey?: string | null;
 }
 
 export interface AlertTrigger {
@@ -20,6 +51,8 @@ export interface DelegationRule {
   name: string;
   matchers: LabelMap;
   enabled: boolean;
+  /** The Hermes profile matching alerts are routed to; null = the default Hermes endpoint. */
+  profileId: number | null;
   createdAt: number;
   updatedAt: number;
 }

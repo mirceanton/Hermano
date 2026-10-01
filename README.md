@@ -31,6 +31,8 @@ By default nothing is forwarded anywhere. The app just surfaces all of your curr
 
 From the dashboard you can look through active alerts or history and decide that a given *kind* of alert (matched by labels, e.g. `alertname=KubePodCrashLooping`) should start being delegated to your [Hermes agent](https://github.com/NousResearch/hermes-agent) from then on. A matching alert is dispatched via Hermes' OpenAI-compatible Runs API and its outcome is tracked end-to-end (`pending` → `dispatched` → `completed`/`failed`/`timed_out`) by directly polling Hermes for the run's status — see [Delegating to Hermes](#delegating-to-hermes) below.
 
+Each rule can also pick *which* Hermes profile handles its alerts — see [Routing rules to different Hermes profiles](#routing-rules-to-different-hermes-profiles).
+
 ![Delegation rules](.github/assets/rules.png)
 
 ### Selective Pushover notifications
@@ -118,6 +120,31 @@ Then point Hermano at it:
 HERMANO_HERMES_AGENT_URL=http://hermes.<namespace>.svc.cluster.local:8642
 HERMANO_HERMES_AGENT_API_KEY=<the same API_SERVER_KEY>
 ```
+
+### Routing rules to different Hermes profiles
+
+If you run several Hermes profiles (say, a general-purpose bot and a specialist one) you can send different alerts to different ones. A **Hermano profile** is just a named Hermes endpoint — a base URL plus an optional API key — so it works however you expose your Hermes profiles: each with its own API server (own port and `API_SERVER_KEY`), or under per-profile URLs on a shared gateway.
+
+1. **Settings → Hermes Profiles → Add profile**: give it a name, the URL of that Hermes' API server, and its API key.
+2. **Rules → add or edit a rule → Hermes profile**: pick the profile that should handle alerts matching that rule.
+
+The endpoint configured under **Settings → Hermes Agent** (or via `HERMANO_HERMES_AGENT_URL`) is the **default**: any rule that doesn't pick a profile uses it, so existing setups keep working unchanged. A typical split looks like this:
+
+| Rule | Matchers | Profile |
+| --- | --- | --- |
+| everything critical | `severity=critical` | *Default* |
+| database trouble | `severity=critical`, `team=data` | `db-bot` |
+
+When several rules match one alert, **the most specific rule wins** — the one with the most matchers — and a tie goes to the older rule. So `db-bot` gets the `team=data` alerts even though the broader rule was created first. (Before profiles existed, overlapping rules were resolved purely oldest-first; if you have overlapping rules, check this still routes the way you expect.)
+
+Worth knowing:
+
+- There's no catch-all rule: every rule still needs at least one matcher. To send "most" alerts to one bot, use a broad matcher such as `severity=critical`, and add narrower rules for the exceptions.
+- A profile's API key is its own. It is never borrowed from the default endpoint, so one endpoint's credential is never sent to another URL.
+- Each delegation records which profile it was sent to, shown on the alert, Delegations page and timeline. Cancelling a run stops it on that same endpoint, and a manual *delegate*/*retry* from the dashboard is routed by whichever rule currently matches the alert (the default endpoint if none does).
+- A profile still used by a rule can't be deleted — move or delete those rules first — so a rule can never silently fall back to a different bot.
+- The dispatch timeout, poll interval and system prompt are shared by all profiles.
+- Profiles are managed from the dashboard only; there are no environment variables for them.
 
 ## Notifying you via Pushover
 

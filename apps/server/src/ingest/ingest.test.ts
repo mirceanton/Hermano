@@ -11,6 +11,8 @@ import {
   markManualDelegation,
   recordDelegationOutcome,
 } from "../delegate/queries.js";
+import { createProfile } from "../profiles/queries.js";
+import { createRule } from "../rules/queries.js";
 import { processWebhook } from "./ingest.js";
 import type { WebhookPayload } from "./payload.js";
 
@@ -334,5 +336,83 @@ describe("processWebhook", () => {
     const db = createTestDb();
     const res = processWebhook(db, firingPayload("fp-new", "BrandNewAlert"));
     expect(res.recurrences).toHaveLength(0);
+  });
+});
+
+describe("profile routing", () => {
+  it("routes a matching alert to its rule's profile and freezes the profile onto the delegation", () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    createRule(db, { name: "crashloops", matchers: { alertname: "Crash" }, enabled: true, profileId: profile.id });
+
+    processWebhook(db, firingPayload("fp1", "Crash"));
+    const delegation = getLatestDelegation(db, getActiveAlert(db, "fp1").id)!;
+
+    expect(delegation.profileId).toBe(profile.id);
+    expect(delegation.ruleSnapshot).toEqual({ name: "crashloops", matchers: { alertname: "Crash" }, profile: "sre-bot" });
+  });
+
+  it("leaves the delegation on the default endpoint when the rule has no profile", () => {
+    const db = createTestDb();
+    createRule(db, { name: "everything critical", matchers: { severity: "critical" }, enabled: true, profileId: null });
+
+    processWebhook(db, firingPayload("fp1", "Anything"));
+    const delegation = getLatestDelegation(db, getActiveAlert(db, "fp1").id)!;
+
+    expect(delegation.profileId).toBeNull();
+    expect(delegation.ruleSnapshot.profile).toBeUndefined();
+  });
+
+  it("sends the specific alert to its own profile and everything else to the broader rule's, whichever rule is older", () => {
+    const db = createTestDb();
+    const specialist = createProfile(db, { name: "db-bot", url: "http://db.test", apiKey: null });
+    // The broad rule is created *first* — specificity, not creation order, must decide.
+    createRule(db, { name: "all critical", matchers: { severity: "critical" }, enabled: true, profileId: null });
+    createRule(db, {
+      name: "postgres",
+      matchers: { severity: "critical", alertname: "PostgresDown" },
+      enabled: true,
+      profileId: specialist.id,
+    });
+
+    processWebhook(db, firingPayload("fp-pg", "PostgresDown"));
+    processWebhook(db, firingPayload("fp-other", "DiskFull"));
+
+    const pg = getLatestDelegation(db, getActiveAlert(db, "fp-pg").id)!;
+    const other = getLatestDelegation(db, getActiveAlert(db, "fp-other").id)!;
+    expect(pg.profileId).toBe(specialist.id);
+    expect(other.profileId).toBeNull();
+    expect(other.ruleSnapshot.name).toBe("all critical");
+  });
+
+  it("routes a manual delegation by the currently-matching rule's profile", () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    processWebhook(db, firingPayload("fp1", "Crash"));
+    const alert = getActiveAlert(db, "fp1");
+
+    // No rule matched when it fired (nothing was delegated), so it starts out on the default...
+    markManualDelegation(db, alert.id);
+    expect(getLatestDelegation(db, alert.id)).toMatchObject({ profileId: null, ruleSnapshot: { name: "manual" } });
+    markDispatchFailed(db, alert.id, "boom");
+
+    // ...but a retry after a rule pointing at a profile now exists follows that rule.
+    createRule(db, { name: "crashloops", matchers: { alertname: "Crash" }, enabled: true, profileId: profile.id });
+    markManualDelegation(db, alert.id);
+    expect(getLatestDelegation(db, alert.id)).toMatchObject({
+      profileId: profile.id,
+      ruleSnapshot: { name: "manual", profile: "sre-bot" },
+    });
+  });
+
+  it("ignores a disabled rule's profile for a manual delegation", () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    createRule(db, { name: "crashloops", matchers: { alertname: "Crash" }, enabled: false, profileId: profile.id });
+    processWebhook(db, firingPayload("fp1", "Crash"));
+    const alert = getActiveAlert(db, "fp1");
+
+    markManualDelegation(db, alert.id);
+    expect(getLatestDelegation(db, alert.id)?.profileId).toBeNull();
   });
 });

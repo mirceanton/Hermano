@@ -53,17 +53,39 @@ export const alertTriggers = sqliteTable(
 );
 
 /**
+ * A named Hermes endpoint that delegation rules can route to (one Hermes
+ * profile's own api_server, or a profile under a multiplexed gateway's
+ * /p/<profile> prefix — either way, just a base URL plus an optional
+ * bearer key). The endpoint configured on the Settings page / via env var
+ * is the implicit "default" profile and is deliberately not a row here, so
+ * existing deployments and rules keep working untouched.
+ */
+export const hermesProfiles = sqliteTable("hermes_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  url: text("url").notNull(),
+  // Deliberately not falling back to the default endpoint's key when null:
+  // that would send one deployment's credential to a different URL.
+  apiKey: text("api_key"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+/**
  * A label-matcher-based auto-delegation rule. Duplicate matcher sets are
  * rejected at the application layer (see rules/queries.ts), not via a DB
  * constraint — matchers is a JSON blob, so there's no natural column-level
  * uniqueness to express. `enabled` has no `.default()`: always pass it
- * explicitly from the route handler.
+ * explicitly from the route handler. A null profileId means "the default
+ * Hermes endpoint"; a profile still referenced by a rule can't be deleted
+ * (restrict), so a rule can never silently fall back to a different bot.
  */
 export const delegationRules = sqliteTable("delegation_rules", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   matchers: text("matchers", { mode: "json" }).$type<LabelMap>().notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  profileId: integer("profile_id").references(() => hermesProfiles.id, { onDelete: "restrict" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -84,6 +106,11 @@ export const delegations = sqliteTable(
     // A rule can be deleted after it triggered a delegation; ruleSnapshot
     // below freezes its name+matchers at match time so history survives that.
     ruleId: integer("rule_id").references(() => delegationRules.id, { onDelete: "set null" }),
+    // Which Hermes endpoint this attempt was sent to (null = the default
+    // one). Recorded on the attempt itself, not looked up through the rule:
+    // the rule can be edited or deleted mid-run, and cancelling has to stop
+    // the run on the same endpoint that created it.
+    profileId: integer("profile_id").references(() => hermesProfiles.id, { onDelete: "set null" }),
     ruleSnapshot: text("rule_snapshot", { mode: "json" }).$type<RuleSnapshot>().notNull(),
     status: text("status", {
       enum: ["pending", "dispatched", "completed", "failed", "timed_out", "cancelled"],
@@ -168,6 +195,8 @@ export type AlertRow = typeof alerts.$inferSelect;
 export type NewAlertRow = typeof alerts.$inferInsert;
 export type AlertTriggerRow = typeof alertTriggers.$inferSelect;
 export type NewAlertTriggerRow = typeof alertTriggers.$inferInsert;
+export type HermesProfileRow = typeof hermesProfiles.$inferSelect;
+export type NewHermesProfileRow = typeof hermesProfiles.$inferInsert;
 export type DelegationRuleRow = typeof delegationRules.$inferSelect;
 export type NewDelegationRuleRow = typeof delegationRules.$inferInsert;
 export type DelegationRow = typeof delegations.$inferSelect;

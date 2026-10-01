@@ -9,7 +9,7 @@ export function listRules(db: DbClient): DelegationRuleRow[] {
 
 export function createRule(
   db: DbClient,
-  input: { name: string; matchers: LabelMap; enabled: boolean },
+  input: { name: string; matchers: LabelMap; enabled: boolean; profileId: number | null },
 ): DelegationRuleRow {
   const now = new Date();
   return db
@@ -22,7 +22,7 @@ export function createRule(
 export function updateRule(
   db: DbClient,
   id: number,
-  input: Partial<{ name: string; matchers: LabelMap; enabled: boolean }>,
+  input: Partial<{ name: string; matchers: LabelMap; enabled: boolean; profileId: number | null }>,
 ): DelegationRuleRow | null {
   const rows = db
     .update(delegationRules)

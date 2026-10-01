@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatRelativeTime } from "@/lib/format"
-import { useDeleteRule, useRules, useUpdateRule } from "@/lib/queries"
+import { useDeleteRule, useProfiles, useRules, useUpdateRule } from "@/lib/queries"
 
 type StatusFilter = "all" | "enabled" | "disabled"
 
 export function RulesPage() {
   const { data: rules, isPending } = useRules()
+  const { data: profiles } = useProfiles()
   const updateRule = useUpdateRule()
   const deleteRule = useDeleteRule()
 
@@ -20,16 +21,19 @@ export function RulesPage() {
   const [status, setStatus] = useState<StatusFilter>("all")
   const [editing, setEditing] = useState<DelegationRule | "new" | null>(null)
 
+  const profileNames = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p.name])), [profiles])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return (rules ?? []).filter((rule) => {
       if (status === "enabled" && !rule.enabled) return false
       if (status === "disabled" && rule.enabled) return false
       if (!q) return true
-      const haystack = [rule.name, ...Object.entries(rule.matchers).map(([k, v]) => `${k}=${v}`)].join(" ").toLowerCase()
+      const profileName = rule.profileId == null ? "" : (profileNames.get(rule.profileId) ?? "")
+      const haystack = [rule.name, profileName, ...Object.entries(rule.matchers).map(([k, v]) => `${k}=${v}`)].join(" ").toLowerCase()
       return haystack.includes(q)
     })
-  }, [rules, search, status])
+  }, [rules, search, status, profileNames])
 
   return (
     <div>
@@ -38,7 +42,8 @@ export function RulesPage() {
           <h1 className="text-xl font-semibold">Delegation Rules</h1>
           <p className="mt-1 max-w-lg text-sm text-muted-foreground">
             By default, no alerts are forwarded to Hermes. Add a rule to forward alerts matching a set of labels —
-            matching is <strong>AND</strong> across all key=value pairs. Rules apply going forward.
+            matching is <strong>AND</strong> across all key=value pairs. Rules apply going forward. Each rule can route to a
+            specific Hermes profile; when several rules match one alert, the most specific (most matchers) wins.
           </p>
         </div>
         <Button className="ml-auto" onClick={() => setEditing("new")}>
@@ -63,7 +68,7 @@ export function RulesPage() {
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Input
               type="search"
-              placeholder="Search rules by name or matcher…"
+              placeholder="Search rules by name, profile or matcher…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-xs"
@@ -90,6 +95,7 @@ export function RulesPage() {
                 <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground uppercase">
                   <th className="px-3 py-2 font-medium">Name</th>
                   <th className="px-3 py-2 font-medium">Matchers</th>
+                  <th className="px-3 py-2 font-medium">Profile</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium">Created</th>
                   <th className="px-3 py-2 font-medium"></th>
@@ -107,6 +113,9 @@ export function RulesPage() {
                           </span>
                         ))}
                       </div>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                      {rule.profileId == null ? "Default" : (profileNames.get(rule.profileId) ?? "…")}
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant={rule.enabled ? "default" : "outline"}>{rule.enabled ? "enabled" : "disabled"}</Badge>

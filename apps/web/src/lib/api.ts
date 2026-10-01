@@ -4,6 +4,9 @@ import type {
   AuthMe,
   DelegationLogEntry,
   DelegationRule,
+  HermesProfile,
+  HermesProfileCreateInput,
+  HermesProfileUpdateInput,
   LabelMap,
   OverviewStats,
   Paginated,
@@ -65,7 +68,12 @@ export function fetchRules(): Promise<DelegationRule[]> {
   return request<DelegationRule[]>("/api/rules")
 }
 
-export function createRule(input: { name: string; matchers: LabelMap; enabled: boolean }): Promise<DelegationRule> {
+export function createRule(input: {
+  name: string
+  matchers: LabelMap
+  enabled: boolean
+  profileId: number | null
+}): Promise<DelegationRule> {
   return request<DelegationRule>("/api/rules", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -75,7 +83,7 @@ export function createRule(input: { name: string; matchers: LabelMap; enabled: b
 
 export function updateRule(
   id: number,
-  patch: Partial<{ name: string; matchers: LabelMap; enabled: boolean }>,
+  patch: Partial<{ name: string; matchers: LabelMap; enabled: boolean; profileId: number | null }>,
 ): Promise<DelegationRule> {
   return request<DelegationRule>(`/api/rules/${id}`, {
     method: "PATCH",
@@ -86,6 +94,30 @@ export function updateRule(
 
 export function deleteRule(id: number): Promise<void> {
   return request<void>(`/api/rules/${id}`, { method: "DELETE" })
+}
+
+export function fetchProfiles(): Promise<HermesProfile[]> {
+  return request<HermesProfile[]>("/api/profiles")
+}
+
+export function createProfile(input: HermesProfileCreateInput): Promise<HermesProfile> {
+  return request<HermesProfile>("/api/profiles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateProfile(id: number, patch: HermesProfileUpdateInput): Promise<HermesProfile> {
+  return request<HermesProfile>(`/api/profiles/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteProfile(id: number): Promise<void> {
+  return request<void>(`/api/profiles/${id}`, { method: "DELETE" })
 }
 
 export function fetchAuthMe(): Promise<AuthMe> {

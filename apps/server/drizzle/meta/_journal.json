@@ -29,6 +29,13 @@
       "when": 1786482605080,
       "tag": "0003_luxuriant_purple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790841599380,
+      "tag": "0004_useful_cloak",
+      "breakpoints": true
     }
   ]
 }

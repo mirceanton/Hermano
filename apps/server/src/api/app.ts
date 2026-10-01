@@ -8,6 +8,7 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerAlertRoutes } from "./routes/alerts.js";
 import { registerDelegationRoutes } from "./routes/delegations.js";
 import { registerOverviewRoute } from "./routes/overview.js";
+import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerRuleRoutes } from "./routes/rules.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerWebhookRoute } from "./routes/webhook.js";
@@ -31,6 +32,7 @@ export function buildApp(db: DbClient, config: Config): FastifyInstance {
   registerAlertRoutes(app, db, config);
   registerDelegationRoutes(app, db);
   registerRuleRoutes(app, db);
+  registerProfileRoutes(app, db);
   registerSettingsRoutes(app, db, config);
 
   if (config.staticWebDir) {

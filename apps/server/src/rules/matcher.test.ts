@@ -36,6 +36,7 @@ function rule(overrides: Partial<DelegationRuleRow>): DelegationRuleRow {
     name: "rule",
     matchers: {},
     enabled: true,
+    profileId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -54,5 +55,31 @@ describe("matchRule", () => {
       rule({ id: 2, name: "second", matchers: { alertname: "Target" } }),
     ];
     expect(matchRule({ alertname: "Target" }, rules)?.id).toBe(1);
+  });
+
+  it("prefers the more specific rule even when a broader one was created first", () => {
+    const rules = [
+      rule({ id: 1, name: "broad", matchers: { severity: "critical" } }),
+      rule({ id: 2, name: "narrow", matchers: { severity: "critical", alertname: "Target" } }),
+    ];
+    expect(matchRule({ alertname: "Target", severity: "critical" }, rules)?.name).toBe("narrow");
+    expect(matchRule({ alertname: "Other", severity: "critical" }, rules)?.name).toBe("broad");
+  });
+
+  it("gives equally specific rules to the oldest, regardless of input order", () => {
+    const older = rule({ id: 1, name: "older", matchers: { alertname: "Target" } });
+    const newer = rule({ id: 2, name: "newer", matchers: { severity: "critical" } });
+    const labels = { alertname: "Target", severity: "critical" };
+    expect(matchRule(labels, [older, newer])?.name).toBe("older");
+    expect(matchRule(labels, [newer, older])?.name).toBe("older");
+  });
+
+  it("does not reorder the caller's array", () => {
+    const rules = [
+      rule({ id: 1, matchers: { severity: "critical" } }),
+      rule({ id: 2, matchers: { severity: "critical", alertname: "Target" } }),
+    ];
+    matchRule({ alertname: "Target", severity: "critical" }, rules);
+    expect(rules.map((r) => r.id)).toEqual([1, 2]);
   });
 });

@@ -22,7 +22,10 @@ function DelegationDialog({ delegation, alertName, onClose }: { delegation: Dele
         </DialogHeader>
         <div className="flex items-center gap-2">
           <StatusBadge status={delegation.status} />
-          <span className="text-sm text-muted-foreground">via {delegation.rule.name}</span>
+          <span className="text-sm text-muted-foreground">
+            via {delegation.rule.name}
+            {delegation.rule.profile && ` → ${delegation.rule.profile}`}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
@@ -251,7 +254,10 @@ export function AlertDetailPage() {
                 .reverse()
                 .map((d) => (
                   <tr key={d.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-2">{d.rule.name}</td>
+                    <td className="px-3 py-2">
+                      {d.rule.name}
+                      {d.rule.profile && <div className="text-xs text-muted-foreground">→ {d.rule.profile}</div>}
+                    </td>
                     <td className="px-3 py-2">
                       <StatusBadge status={d.status} />
                     </td>
