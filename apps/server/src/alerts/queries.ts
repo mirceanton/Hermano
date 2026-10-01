@@ -135,7 +135,8 @@ function buildTimeline(triggers: AlertTriggerRow[], delegations: DelegationRow[]
 
   for (const d of delegations) {
     const rule = d.ruleSnapshot.name === "manual" ? "a manual delegation" : d.ruleSnapshot.name;
-    if (d.delegatedAt) events.push({ at: d.delegatedAt.getTime(), label: `Delegated to ${rule}` });
+    const profile = d.ruleSnapshot.profile ? ` → ${d.ruleSnapshot.profile}` : "";
+    if (d.delegatedAt) events.push({ at: d.delegatedAt.getTime(), label: `Delegated to ${rule}${profile}` });
     if (d.dispatchedAt) events.push({ at: d.dispatchedAt.getTime(), label: "Dispatched to Hermes" });
     if (d.completedAt) events.push({ at: d.completedAt.getTime(), label: `Agent ${delegationLabel(d.status)}` });
   }

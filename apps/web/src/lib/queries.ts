@@ -1,18 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { LabelMap, SettingsUpdateInput } from "@hermano/shared"
+import type { HermesProfileCreateInput, HermesProfileUpdateInput, LabelMap, SettingsUpdateInput } from "@hermano/shared"
 import {
   cancelDelegation,
+  createProfile,
   createRule,
   delegateAlert,
+  deleteProfile,
   deleteRule,
   fetchAlert,
   fetchAlerts,
   fetchAuthMe,
   fetchDelegations,
   fetchOverview,
+  fetchProfiles,
   fetchRules,
   fetchSettings,
   logout,
+  updateProfile,
   updateRule,
   updateSettings,
   type AlertFilters,
@@ -108,7 +112,7 @@ export function useRules() {
 export function useCreateRule() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; matchers: LabelMap; enabled: boolean }) => createRule(input),
+    mutationFn: (input: { name: string; matchers: LabelMap; enabled: boolean; profileId: number | null }) => createRule(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rules"] })
     },
@@ -118,8 +122,13 @@ export function useCreateRule() {
 export function useUpdateRule() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: Partial<{ name: string; matchers: LabelMap; enabled: boolean }> }) =>
-      updateRule(id, patch),
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: number
+      patch: Partial<{ name: string; matchers: LabelMap; enabled: boolean; profileId: number | null }>
+    }) => updateRule(id, patch),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rules"] })
     },
@@ -132,6 +141,43 @@ export function useDeleteRule() {
     mutationFn: (id: number) => deleteRule(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rules"] })
+    },
+  })
+}
+
+export function useProfiles() {
+  return useQuery({
+    queryKey: ["profiles"],
+    queryFn: fetchProfiles,
+  })
+}
+
+export function useCreateProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: HermesProfileCreateInput) => createProfile(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] })
+    },
+  })
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: HermesProfileUpdateInput }) => updateProfile(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] })
+    },
+  })
+}
+
+export function useDeleteProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deleteProfile(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] })
     },
   })
 }

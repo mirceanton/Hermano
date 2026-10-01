@@ -5,6 +5,7 @@ import {
   alerts,
   delegationRules,
   delegations,
+  hermesProfiles,
   type AlertRow,
   type DelegationRow,
 } from "../db/schema.js";
@@ -170,12 +171,18 @@ function applyFiring(
     const rule = matchRule(labels, enabledRules);
     if (rule) {
       matchedRule = true;
+      // The rule's profile is frozen onto the delegation (by id for routing,
+      // by name for display) so a later edit to the rule or profile can't
+      // change where an already-created delegation goes.
+      const profile =
+        rule.profileId == null ? undefined : tx.select().from(hermesProfiles).where(eq(hermesProfiles.id, rule.profileId)).get();
       tx.insert(delegations)
         .values({
           alertId: alert.id,
           triggerId: trigger.id,
           ruleId: rule.id,
-          ruleSnapshot: { name: rule.name, matchers: rule.matchers },
+          profileId: profile?.id ?? null,
+          ruleSnapshot: { name: rule.name, matchers: rule.matchers, ...(profile && { profile: profile.name }) },
           status: "pending",
           delegatedAt: now,
           createdAt: now,

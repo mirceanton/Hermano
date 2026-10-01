@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createTestDb } from "../db/test-helpers.js";
 import type { DelegationStatus } from "@hermano/shared";
@@ -5,6 +6,7 @@ import { loadConfig } from "../config.js";
 import { alerts, delegations, type AlertRow } from "../db/schema.js";
 import type { HermesClientLike, HermesRun } from "../hermes/client.js";
 import { HermesApiError } from "../hermes/client.js";
+import { createProfile, deleteProfile } from "../profiles/queries.js";
 import { updateSettingsRow } from "../settings/queries.js";
 import { cancelDelegation, cancelDelegationWithEffectiveConfig, dispatch, dispatchWithEffectiveConfig, startSweeper } from "./delegate.js";
 import { getLatestDelegation, markDispatched, NoCancellableDelegationError } from "./queries.js";
@@ -306,6 +308,120 @@ describe("dispatchWithEffectiveConfig", () => {
         "http://settings-configured.test/v1/runs",
         expect.anything(),
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("profile-aware dispatch", () => {
+  /** A pending delegation already routed to profileId (null = default), as ingest would have left it. */
+  function createRoutedAlert(db: Db, fingerprint: string, profile: { id: number; name: string } | null): AlertRow {
+    const alert = createPendingAlert(db, fingerprint);
+    db.update(delegations)
+      .set({ profileId: profile?.id ?? null, ruleSnapshot: { name: "rule", ...(profile && { profile: profile.name }) } })
+      .where(eq(delegations.alertId, alert.id))
+      .run();
+    return alert;
+  }
+
+  function stubHermes() {
+    const fetchSpy = vi.fn(async (url: string | URL, _init?: RequestInit) => {
+      if (url.toString().endsWith("/v1/runs")) {
+        return new Response(JSON.stringify({ run_id: "run-1" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ run_id: "run-1", status: "completed", output: "done\nSTATUS: completed" }), {
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    return fetchSpy;
+  }
+
+  function authHeaderFor(fetchSpy: ReturnType<typeof stubHermes>, urlPrefix: string): string | null {
+    const call = fetchSpy.mock.calls.find(([url]) => url.toString().startsWith(urlPrefix));
+    return call ? new Headers(call[1]?.headers).get("Authorization") : null;
+  }
+
+  it("sends each alert in one batch to its own profile's URL and key, and the default's to the default", async () => {
+    const db = createTestDb();
+    const sre = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: "sre-key" });
+    const dbBot = createProfile(db, { name: "db-bot", url: "http://db.test/p/db", apiKey: null });
+    updateSettingsRow(db, { hermesAgentUrl: "http://default.test", hermesAgentApiKey: "default-key", hermesPollIntervalMs: 10 });
+    const a = createRoutedAlert(db, "fp-sre", sre);
+    const b = createRoutedAlert(db, "fp-db", dbBot);
+    const c = createRoutedAlert(db, "fp-default", null);
+
+    const fetchSpy = stubHermes();
+    try {
+      dispatchWithEffectiveConfig(db, loadConfig(BASE_ENV), [a, b, c]);
+      await waitForStatus(db, a.id, "completed");
+      await waitForStatus(db, b.id, "completed");
+      await waitForStatus(db, c.id, "completed");
+
+      const created = fetchSpy.mock.calls.map(([url]) => url.toString()).filter((u) => u.endsWith("/v1/runs"));
+      expect(created.sort()).toEqual(["http://db.test/p/db/v1/runs", "http://default.test/v1/runs", "http://sre.test/v1/runs"]);
+
+      // Each endpoint gets only its own credential — never another profile's, never the default's.
+      expect(authHeaderFor(fetchSpy, "http://sre.test")).toBe("Bearer sre-key");
+      expect(authHeaderFor(fetchSpy, "http://db.test")).toBeNull();
+      expect(authHeaderFor(fetchSpy, "http://default.test")).toBe("Bearer default-key");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("fails the delegation — rather than falling back to the default endpoint — when its profile was deleted", async () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
+    const alert = createRoutedAlert(db, "fp1", profile);
+    deleteProfile(db, profile.id);
+
+    const fetchSpy = stubHermes();
+    try {
+      dispatchWithEffectiveConfig(db, loadConfig(BASE_ENV), [alert]);
+      const latest = await waitForStatus(db, alert.id, "failed");
+      expect(latest.summary).toContain('"sre-bot" no longer exists');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("cancels on the profile the run was dispatched to, not the default endpoint", async () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: "sre-key" });
+    updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
+    const alert = createRoutedAlert(db, "fp1", profile);
+    markDispatched(db, alert.id, "run-1");
+
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      await cancelDelegationWithEffectiveConfig(db, loadConfig(BASE_ENV), alert.id);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith("http://sre.test/v1/runs/run-1/stop", expect.anything());
+      expect(getLatestDelegation(db, alert.id)?.status).toBe("cancelled");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("still marks a run cancelled when its profile was deleted, without calling any Hermes", async () => {
+    const db = createTestDb();
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
+    const alert = createRoutedAlert(db, "fp1", profile);
+    markDispatched(db, alert.id, "run-1");
+    deleteProfile(db, profile.id);
+
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      await cancelDelegationWithEffectiveConfig(db, loadConfig(BASE_ENV), alert.id);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(getLatestDelegation(db, alert.id)?.status).toBe("cancelled");
     } finally {
       vi.unstubAllGlobals();
     }

@@ -1,8 +1,9 @@
 import type { Config } from "../config.js";
 import type { DbClient } from "../db/client.js";
-import type { AlertRow } from "../db/schema.js";
+import type { AlertRow, DelegationRow, SettingsRow } from "../db/schema.js";
 import { HermesClient, type HermesClientLike } from "../hermes/client.js";
 import { pollRun, PollTimeoutError } from "../hermes/outcome.js";
+import { getProfile } from "../profiles/queries.js";
 import { notifyDelegationOutcome } from "../pushover/notify.js";
 import { effectiveHermesConfig, effectiveSystemPrompt } from "../settings/effective.js";
 import { getSettingsRow } from "../settings/queries.js";
@@ -58,20 +59,48 @@ export function dispatch(db: DbClient, client: HermesClientLike, alertsToDispatc
 }
 
 /**
+ * Builds the HermesClient for wherever a delegation was routed: its
+ * recorded profile's own URL and key, or — when it has none — the default
+ * endpoint (env override, else the Settings page, see settings/effective.ts).
+ * Returns null when the delegation names a profile that has since been
+ * deleted; callers must treat that as "unreachable" rather than falling
+ * back to the default endpoint, which would hand the alert to a different
+ * bot than the rule asked for. Timeouts, poll interval and the system
+ * prompt are deliberately not per-profile: they stay the global settings.
+ */
+function clientForDelegation(
+  db: DbClient,
+  config: Config,
+  settings: SettingsRow,
+  delegation: DelegationRow | null,
+): HermesClient | null {
+  if (delegation?.profileId != null) {
+    const profile = getProfile(db, delegation.profileId);
+    return profile ? new HermesClient({ baseUrl: profile.url, apiKey: profile.apiKey ?? undefined }) : null;
+  }
+  // profileId is nulled out when its profile is deleted, but the name frozen
+  // in the snapshot survives — that's how "deleted" differs from "default".
+  if (delegation?.ruleSnapshot.profile) return null;
+
+  const hermes = effectiveHermesConfig(config, settings);
+  return new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
+}
+
+/**
  * The entry point route handlers actually call: resolves the current
  * effective Hermes config + system prompt (env override, else whatever's
  * saved on the Settings page, else the built-in default — see
  * settings/effective.ts) fresh for this dispatch, builds a HermesClient
- * from it, and hands off to dispatch() above. Keeping dispatch() itself
- * taking an injectable client is what keeps it directly unit-testable with
- * a fake client, unrelated to this settings-resolution concern.
+ * for each alert's own routing (clientForDelegation — different alerts in
+ * one webhook batch can go to different Hermes profiles), and hands off to
+ * dispatch() above. Keeping dispatch() itself taking an injectable client
+ * is what keeps it directly unit-testable with a fake client, unrelated to
+ * this settings-resolution concern.
  */
 export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alertsToDispatch: AlertRow[]): void {
   const settings = getSettingsRow(db);
   const hermes = effectiveHermesConfig(config, settings);
-  const client = new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
-
-  dispatch(db, client, alertsToDispatch, {
+  const opts: DispatchOptions = {
     dispatchTimeoutMs: hermes.dispatchTimeoutMs,
     pollIntervalMs: hermes.pollIntervalMs,
     instructions: effectiveSystemPrompt(settings),
@@ -80,7 +109,17 @@ export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alerts
         console.error(`pushover: notifying delegation outcome failed for ${alert.fingerprint}`, err);
       });
     },
-  });
+  };
+
+  for (const alert of alertsToDispatch) {
+    const delegation = getLatestDelegation(db, alert.id);
+    const client = clientForDelegation(db, config, settings, delegation);
+    if (!client) {
+      markDispatchFailed(db, alert.id, `Hermes profile "${delegation?.ruleSnapshot.profile}" no longer exists`);
+      continue;
+    }
+    dispatch(db, client, [alert], opts);
+  }
 }
 
 /**
@@ -94,31 +133,38 @@ export function dispatchWithEffectiveConfig(db: DbClient, config: Config, alerts
  * if the alert's latest delegation isn't currently "dispatched" (nothing to
  * cancel) — callers map that to a 409.
  */
-export async function cancelDelegation(db: DbClient, client: HermesClientLike, alertId: number): Promise<void> {
+export async function cancelDelegation(db: DbClient, client: HermesClientLike | null, alertId: number): Promise<void> {
   const delegation = getLatestDelegation(db, alertId);
   if (!delegation || delegation.status !== "dispatched" || !delegation.runId) {
     throw new NoCancellableDelegationError();
   }
 
   const runId = delegation.runId;
-  await withTimeout(client.stopRun(runId), STOP_RUN_TIMEOUT_MS, "hermes: stop-run timed out").catch((err) => {
-    console.warn(`delegate: failed to stop hermes run ${runId} while cancelling`, err);
-  });
+  if (client) {
+    await withTimeout(client.stopRun(runId), STOP_RUN_TIMEOUT_MS, "hermes: stop-run timed out").catch((err) => {
+      console.warn(`delegate: failed to stop hermes run ${runId} while cancelling`, err);
+    });
+  } else {
+    // A null client means the run's Hermes profile has been deleted, so
+    // there's nowhere left to send the stop to — same best-effort stance as
+    // a failed stop above: the operator's Cancel still takes effect locally.
+    console.warn(`delegate: hermes profile for run ${runId} no longer exists; marking it cancelled without stopping it`);
+  }
 
   cancelDispatchedDelegation(db, alertId, "cancelled by user");
 }
 
 /**
- * The entry point route handlers actually call for cancellation — resolves
- * the current effective Hermes config the same way dispatchWithEffectiveConfig
- * does, builds a HermesClient from it, and hands off to cancelDelegation()
- * above (kept separately injectable-client for direct unit testing with a
- * fake client).
+ * The entry point route handlers actually call for cancellation — builds
+ * the HermesClient for the endpoint the delegation was actually dispatched
+ * to (its profile, not whatever the default is today: a stop request sent
+ * to the wrong Hermes would silently leave the real run going), and hands
+ * off to cancelDelegation() above (kept separately injectable-client for
+ * direct unit testing with a fake client).
  */
 export function cancelDelegationWithEffectiveConfig(db: DbClient, config: Config, alertId: number): Promise<void> {
   const settings = getSettingsRow(db);
-  const hermes = effectiveHermesConfig(config, settings);
-  const client = new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
+  const client = clientForDelegation(db, config, settings, getLatestDelegation(db, alertId));
   return cancelDelegation(db, client, alertId);
 }
 

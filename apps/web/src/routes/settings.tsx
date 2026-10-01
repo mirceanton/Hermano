@@ -1,12 +1,14 @@
-import type { SettingsResponse } from "@hermano/shared"
-import { RotateCcw } from "lucide-react"
+import type { HermesProfile, SettingsResponse } from "@hermano/shared"
+import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react"
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react"
+import { ProfileDialog } from "@/components/profile-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { useSettings, useUpdateSettings } from "@/lib/queries"
+import { useDeleteProfile, useProfiles, useSettings, useUpdateSettings } from "@/lib/queries"
 
 function EnvCaption({ envVar }: { envVar: string }) {
   return (
@@ -185,7 +187,10 @@ function HermesSection({ hermes }: { hermes: SettingsResponse["hermes"] }) {
     <Card>
       <CardHeader>
         <CardTitle>Hermes Agent</CardTitle>
-        <CardDescription>Where and how alerts get dispatched to Hermes for investigation.</CardDescription>
+        <CardDescription>
+          Where and how alerts get dispatched to Hermes for investigation. This is the <strong>default</strong> endpoint — used by every
+          rule that doesn't route to one of the profiles below. The timeouts here apply to all profiles.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -270,6 +275,93 @@ function HermesSection({ hermes }: { hermes: SettingsResponse["hermes"] }) {
           </div>
         </form>
       </CardContent>
+    </Card>
+  )
+}
+
+function ProfilesSection() {
+  const { data: profiles, isPending } = useProfiles()
+  const deleteProfile = useDeleteProfile()
+  const [editing, setEditing] = useState<HermesProfile | "new" | null>(null)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Hermes Profiles</CardTitle>
+        <CardDescription>
+          Additional Hermes endpoints — e.g. one bot per kind of task — that individual delegation rules can route to instead of the
+          default above. Pick a profile on the rule itself; rules that don't pick one keep using the default.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {isPending && <Skeleton className="h-10" />}
+
+        {profiles && profiles.length === 0 && (
+          <p className="text-sm text-muted-foreground">No profiles yet — every rule uses the default endpoint.</p>
+        )}
+
+        {profiles && profiles.length > 0 && (
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground uppercase">
+                  <th className="px-3 py-2 font-medium">Name</th>
+                  <th className="px-3 py-2 font-medium">URL</th>
+                  <th className="px-3 py-2 font-medium">API key</th>
+                  <th className="px-3 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((profile) => (
+                  <tr key={profile.id} className="border-b last:border-b-0">
+                    <td className="px-3 py-2 font-medium">{profile.name}</td>
+                    <td className="px-3 py-2 break-all text-muted-foreground">{profile.url}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant={profile.apiKeySet ? "default" : "outline"}>{profile.apiKeySet ? "set" : "none"}</Badge>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="secondary" size="icon-sm" aria-label={`Edit ${profile.name}`} onClick={() => setEditing(profile)}>
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Delete ${profile.name}`}
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (window.confirm(`Delete the "${profile.name}" profile?`)) deleteProfile.mutate(profile.id)
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* e.g. "profile is still used by rule: crashloops" — a profile in use can't be deleted. */}
+        {deleteProfile.isError && <p className="text-sm text-destructive">{deleteProfile.error.message}</p>}
+
+        <div>
+          <Button type="button" variant="outline" onClick={() => setEditing("new")}>
+            <Plus className="size-4" /> Add profile
+          </Button>
+        </div>
+      </CardContent>
+
+      {editing && (
+        <ProfileDialog
+          key={editing === "new" ? "new" : editing.id}
+          open
+          onOpenChange={(open) => !open && setEditing(null)}
+          profile={editing === "new" ? undefined : editing}
+        />
+      )}
     </Card>
   )
 }
@@ -610,6 +702,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-6">
           <GeneralSection general={settings.general} />
           <HermesSection hermes={settings.hermes} />
+          <ProfilesSection />
           <PromptSection systemPrompt={settings.systemPrompt} />
           <PushoverSection pushover={settings.pushover} />
           <OidcSection oidc={settings.oidc} />

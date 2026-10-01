@@ -3,11 +3,14 @@ import type { DbClient } from "../db/client.js";
 import {
   alertTriggers,
   alerts,
+  delegationRules,
   delegations,
   type AlertRow,
   type AlertTriggerRow,
   type DelegationRow,
 } from "../db/schema.js";
+import { getProfile } from "../profiles/queries.js";
+import { matchRule } from "../rules/matcher.js";
 
 export class AlertNotFoundError extends Error {
   constructor() {
@@ -66,12 +69,18 @@ function hasInFlightDelegation(db: DbClient, alertId: number): boolean {
 
 /**
  * Creates a new pending Delegation for an operator-triggered dispatch (the
- * dashboard's "delegate now"/"retry" action), bypassing rule matching
- * entirely. Unlike an automatic rule-match delegation, this isn't caused
- * by any particular trigger, so triggerId/ruleId stay null (ruleSnapshot
- * is stamped {name: "manual"}). A retry after a failure/timeout creates a
- * fresh row rather than touching the previous one, so history survives.
- * The caller is responsible for actually dispatching the returned alert.
+ * dashboard's "delegate now"/"retry" action). Unlike an automatic
+ * rule-match delegation, this isn't caused by any particular trigger, so
+ * triggerId/ruleId stay null (ruleSnapshot is stamped {name: "manual"}).
+ * A retry after a failure/timeout creates a fresh row rather than touching
+ * the previous one, so history survives. The caller is responsible for
+ * actually dispatching the returned alert.
+ *
+ * It's not *caused* by a rule, but it is still *routed* by them: the Hermes
+ * profile comes from whichever enabled rule currently matches the alert,
+ * else the default endpoint. That keeps a retry of, say, an alert pinned to
+ * a specialist profile from quietly landing on the default bot, and makes
+ * a retry after fixing a rule's profile follow the fix.
  */
 export function markManualDelegation(db: DbClient, alertId: number): AlertRow {
   const alert = db
@@ -82,11 +91,15 @@ export function markManualDelegation(db: DbClient, alertId: number): AlertRow {
   if (!alert) throw new AlertNotFoundError();
   if (hasInFlightDelegation(db, alertId)) throw new DelegationInFlightError();
 
+  const rule = matchRule(alert.labels, db.select().from(delegationRules).where(eq(delegationRules.enabled, true)).all());
+  const profile = rule?.profileId == null ? null : getProfile(db, rule.profileId);
+
   const now = new Date();
   db.insert(delegations)
     .values({
       alertId,
-      ruleSnapshot: { name: "manual" },
+      profileId: profile?.id ?? null,
+      ruleSnapshot: { name: "manual", ...(profile && { profile: profile.name }) },
       status: "pending",
       delegatedAt: now,
       createdAt: now,
