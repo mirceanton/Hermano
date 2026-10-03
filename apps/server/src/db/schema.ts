@@ -63,10 +63,16 @@ export const alertTriggers = sqliteTable(
 export const hermesProfiles = sqliteTable("hermes_profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
-  url: text("url").notNull(),
+  url: text("url"),
   // Deliberately not falling back to the default endpoint's key when null:
   // that would send one deployment's credential to a different URL.
   apiKey: text("api_key"),
+  /** When true, this profile inherits its URL and API key from the global
+   *  Hermes Agent setting (env var HERMANO_HERMES_AGENT_URL or the Settings
+   *  page) rather than using its own url/apiKey columns. Defaults to false
+   *  for backward compatibility; profiles created before this field existed
+   *  have it set to 0 by the migration. */
+  useSharedConnection: integer("use_shared_connection", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

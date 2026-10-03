@@ -373,7 +373,7 @@ describe("profile-aware dispatch", () => {
 
   it("fails the delegation — rather than falling back to the default endpoint — when its profile was deleted", async () => {
     const db = createTestDb();
-    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
+    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: "sre-key" });
     updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
     const alert = createRoutedAlert(db, "fp1", profile);
     deleteProfile(db, profile.id);
@@ -409,21 +409,61 @@ describe("profile-aware dispatch", () => {
   });
 
   it("still marks a run cancelled when its profile was deleted, without calling any Hermes", async () => {
-    const db = createTestDb();
-    const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: null });
-    updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
-    const alert = createRoutedAlert(db, "fp1", profile);
-    markDispatched(db, alert.id, "run-1");
-    deleteProfile(db, profile.id);
+      const db = createTestDb();
+      const profile = createProfile(db, { name: "sre-bot", url: "http://sre.test", apiKey: "sre-key" });
+      updateSettingsRow(db, { hermesAgentUrl: "http://default.test" });
+      const alert = createRoutedAlert(db, "fp1", profile);
+      markDispatched(db, alert.id, "run-1");
+      deleteProfile(db, profile.id);
 
-    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
-    vi.stubGlobal("fetch", fetchSpy);
-    try {
-      await cancelDelegationWithEffectiveConfig(db, loadConfig(BASE_ENV), alert.id);
-      expect(fetchSpy).not.toHaveBeenCalled();
-      expect(getLatestDelegation(db, alert.id)?.status).toBe("cancelled");
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetchSpy);
+      try {
+        await cancelDelegationWithEffectiveConfig(db, loadConfig(BASE_ENV), alert.id);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(getLatestDelegation(db, alert.id)?.status).toBe("cancelled");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("uses the global Hermes config for a profile with useSharedConnection: true, ignoring its own url", async () => {
+      const db = createTestDb();
+      // Create a profile that shares the global connection
+      const sharedProfile = createProfile(db, { name: "shared-bot", url: null, apiKey: null, useSharedConnection: true });
+      updateSettingsRow(db, { hermesAgentUrl: "http://default.test", hermesAgentApiKey: "default-key", hermesPollIntervalMs: 10 });
+      const alert = createRoutedAlert(db, "fp-shared", sharedProfile);
+
+      const fetchSpy = stubHermes();
+      try {
+        dispatchWithEffectiveConfig(db, loadConfig(BASE_ENV), [alert]);
+        await waitForStatus(db, alert.id, "completed");
+
+        // Must have dispatched to the default endpoint, not the profile's own (nonexistent) url
+        const created = fetchSpy.mock.calls.map(([url]) => url.toString()).filter((u) => u.endsWith("/v1/runs"));
+        expect(created).toEqual(["http://default.test/v1/runs"]);
+        expect(authHeaderFor(fetchSpy, "http://default.test")).toBe("Bearer default-key");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("still uses its own URL/key for a profile with useSharedConnection: false (backward compat)", async () => {
+      const db = createTestDb();
+      const ownProfile = createProfile(db, { name: "own-bot", url: "http://own.test", apiKey: "own-key" });
+      updateSettingsRow(db, { hermesAgentUrl: "http://default.test", hermesAgentApiKey: "default-key", hermesPollIntervalMs: 10 });
+      const alert = createRoutedAlert(db, "fp-own", ownProfile);
+
+      const fetchSpy = stubHermes();
+      try {
+        dispatchWithEffectiveConfig(db, loadConfig(BASE_ENV), [alert]);
+        await waitForStatus(db, alert.id, "completed");
+
+        const created = fetchSpy.mock.calls.map(([url]) => url.toString()).filter((u) => u.endsWith("/v1/runs"));
+        expect(created).toEqual(["http://own.test/v1/runs"]);
+        expect(authHeaderFor(fetchSpy, "http://own.test")).toBe("Bearer own-key");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
-});

@@ -76,14 +76,23 @@ function clientForDelegation(
 ): HermesClient | null {
   if (delegation?.profileId != null) {
     const profile = getProfile(db, delegation.profileId);
-    return profile ? new HermesClient({ baseUrl: profile.url, apiKey: profile.apiKey ?? undefined }) : null;
+    if (!profile) return null;
+    // When the profile shares the global Hermes connection, use the effective
+    // default config (env-var-backed or Settings-page) rather than the profile's
+    // own url/apiKey — so multiple profiles can share one Hermes deployment
+    // without duplicating credentials.
+    if (profile.useSharedConnection) {
+      const hermes = effectiveHermesConfig(config, settings);
+      return new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey ?? undefined });
+    }
+    return new HermesClient({ baseUrl: profile.url ?? "", apiKey: profile.apiKey ?? undefined });
   }
   // profileId is nulled out when its profile is deleted, but the name frozen
   // in the snapshot survives — that's how "deleted" differs from "default".
   if (delegation?.ruleSnapshot.profile) return null;
 
   const hermes = effectiveHermesConfig(config, settings);
-  return new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey });
+  return new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey ?? undefined });
 }
 
 /**

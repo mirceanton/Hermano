@@ -60,7 +60,7 @@ describe("profile routes", () => {
 
   it("patches only what's sent: omitted api key is kept, null clears it", async () => {
     const { app } = buildTestApp();
-    const { id } = (await createProfileVia(app, { name: "a", url: "http://a.test", apiKey: "k" })).json<HermesProfile>();
+    const { id } = (await createProfileVia(app, { name: "a", url: "http://a.test", apiKey: "s3cret" })).json<HermesProfile>();
 
     const renamed = await app.inject({ method: "PATCH", url: `/api/profiles/${id}`, payload: { name: "b" } });
     expect(renamed.json<HermesProfile>()).toMatchObject({ name: "b", url: "http://a.test", apiKeySet: true });
@@ -104,6 +104,77 @@ describe("profile routes", () => {
     // Moving the rule back to the default endpoint frees the profile.
     await app.inject({ method: "PATCH", url: `/api/rules/${rule.id}`, payload: { profileId: null } });
     expect((await app.inject({ method: "DELETE", url: `/api/profiles/${profile.id}` })).statusCode).toBe(204);
+  });
+
+  describe("useSharedConnection", () => {
+    it("lets a profile be created without a url when useSharedConnection is true", async () => {
+      const { app } = buildTestApp();
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/profiles",
+        payload: { name: "shared-bot", useSharedConnection: true },
+      });
+      expect(res.statusCode).toBe(201);
+      const profile = res.json<HermesProfile>();
+      expect(profile).toMatchObject({ name: "shared-bot", useSharedConnection: true, apiKeySet: false });
+    });
+
+    it("rejects a profile with no url and useSharedConnection false (or omitted) with a 400", async () => {
+      const { app } = buildTestApp();
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/profiles",
+        payload: { name: "orphan" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json<{ error: string }>().error).toContain("url");
+    });
+
+    it("lets an existing profile be patched to useSharedConnection: true", async () => {
+      const { app } = buildTestApp();
+      const profile = (await createProfileVia(app, { name: "bot", url: "http://a.test" })).json<HermesProfile>();
+      expect(profile.useSharedConnection).toBe(false);
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/api/profiles/${profile.id}`,
+        payload: { useSharedConnection: true },
+      });
+      expect(patched.statusCode).toBe(200);
+      const updated = patched.json<HermesProfile>();
+      expect(updated.useSharedConnection).toBe(true);
+      // url still surfaces from the row, but now returned as "" since url can be null
+    });
+
+    it("lets a shared-connection profile be switched back to its own url", async () => {
+      const { app } = buildTestApp();
+      const profile = (await app.inject({
+        method: "POST",
+        url: "/api/profiles",
+        payload: { name: "bot", useSharedConnection: true },
+      })).json<HermesProfile>();
+      expect(profile.useSharedConnection).toBe(true);
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/api/profiles/${profile.id}`,
+        payload: { useSharedConnection: false, url: "http://own.test" },
+      });
+      expect(patched.statusCode).toBe(200);
+      const updated = patched.json<HermesProfile>();
+      expect(updated.useSharedConnection).toBe(false);
+      expect(updated.url).toBe("http://own.test");
+    });
+
+    it("still treats a blank api key as no key when useSharedConnection is true", async () => {
+      const { app } = buildTestApp();
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/profiles",
+        payload: { name: "shared", useSharedConnection: true, apiKey: "  " },
+      });
+      expect(res.json<HermesProfile>().apiKeySet).toBe(false);
+    });
   });
 });
 
