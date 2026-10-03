@@ -36,6 +36,13 @@
       "when": 1790841599380,
       "tag": "0004_useful_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791036000000,
+      "tag": "0005_swift_black_widow",
+      "breakpoints": true
     }
   ]
 }
