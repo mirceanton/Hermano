@@ -17,8 +17,9 @@ function toApiProfile(row: HermesProfileRow): HermesProfile {
   return {
     id: row.id,
     name: row.name,
-    url: row.url,
+    url: row.url ?? "",
     apiKeySet: Boolean(row.apiKey),
+    useSharedConnection: row.useSharedConnection,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
   };
@@ -37,8 +38,18 @@ const apiKeySchema = z
   .transform((v) => (v === "" ? null : v))
   .nullable();
 
-const createBodySchema = z.object({ name: nameSchema, url: urlSchema, apiKey: apiKeySchema.optional() });
-const updateBodySchema = z.object({ name: nameSchema.optional(), url: urlSchema.optional(), apiKey: apiKeySchema.optional() });
+const createBodySchema = z
+  .object({
+    name: nameSchema,
+    url: urlSchema.optional(),
+    apiKey: apiKeySchema.nullable(),
+    useSharedConnection: z.boolean().optional(),
+  })
+  .refine(
+    (data) => data.useSharedConnection || data.url != null,
+    { message: "url is required unless useSharedConnection is true", path: ["url"] },
+  );
+const updateBodySchema = z.object({ name: nameSchema.optional(), url: urlSchema.optional(), apiKey: apiKeySchema.nullable(), useSharedConnection: z.boolean().optional() });
 
 export function registerProfileRoutes(app: FastifyInstance, db: DbClient): void {
   app.get("/api/profiles", async (): Promise<HermesProfile[]> => listProfiles(db).map(toApiProfile));
@@ -49,13 +60,13 @@ export function registerProfileRoutes(app: FastifyInstance, db: DbClient): void 
       reply.code(400).send({ error: parsed.error.issues[0]?.message ?? "invalid profile payload" });
       return;
     }
-    const { name, url, apiKey } = parsed.data;
+    const { name, url, apiKey, useSharedConnection } = parsed.data;
     if (profileNameExists(db, name)) {
       reply.code(409).send({ error: "a profile with this name already exists" });
       return;
     }
 
-    const profile = createProfile(db, { name, url, apiKey: apiKey ?? null });
+    const profile = createProfile(db, { name, url: url ?? null, apiKey: apiKey ?? null, useSharedConnection });
     reply.code(201);
     return toApiProfile(profile) satisfies HermesProfile;
   });
