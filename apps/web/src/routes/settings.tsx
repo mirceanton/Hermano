@@ -290,7 +290,7 @@ function ProfilesSection() {
         <CardTitle>Hermes Profiles</CardTitle>
         <CardDescription>
           Additional Hermes endpoints — e.g. one bot per kind of task — that individual delegation rules can route to instead of the
-          default above. Pick a profile on the rule itself; rules that don't pick one keep using the default.
+          default above. Profiles can use dedicated endpoints or share the default Hermes connection.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -315,9 +315,19 @@ function ProfilesSection() {
                 {profiles.map((profile) => (
                   <tr key={profile.id} className="border-b last:border-b-0">
                     <td className="px-3 py-2 font-medium">{profile.name}</td>
-                    <td className="px-3 py-2 break-all text-muted-foreground">{profile.url}</td>
+                    <td className="px-3 py-2 break-all text-muted-foreground">
+                      {profile.useSharedConnection ? (
+                        <span className="italic">Shared (default Hermes endpoint)</span>
+                      ) : (
+                        profile.url
+                      )}
+                    </td>
                     <td className="px-3 py-2">
-                      <Badge variant={profile.apiKeySet ? "default" : "outline"}>{profile.apiKeySet ? "set" : "none"}</Badge>
+                      {profile.useSharedConnection ? (
+                        <Badge variant="secondary">shared</Badge>
+                      ) : (
+                        <Badge variant={profile.apiKeySet ? "default" : "outline"}>{profile.apiKeySet ? "set" : "none"}</Badge>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
