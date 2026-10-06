@@ -427,7 +427,7 @@ describe("profile-aware dispatch", () => {
       }
     });
 
-    it("uses the global Hermes config for a profile with useSharedConnection: true, ignoring its own url", async () => {
+    it("uses the global Hermes config for a profile with useSharedConnection: true, scoping to /p/<profile>", async () => {
       const db = createTestDb();
       // Create a profile that shares the global connection
       const sharedProfile = createProfile(db, { name: "shared-bot", url: null, apiKey: null, useSharedConnection: true });
@@ -439,10 +439,10 @@ describe("profile-aware dispatch", () => {
         dispatchWithEffectiveConfig(db, loadConfig(BASE_ENV), [alert]);
         await waitForStatus(db, alert.id, "completed");
 
-        // Must have dispatched to the default endpoint, not the profile's own (nonexistent) url
+        // Must have dispatched to the shared endpoint scoped with /p/<profile>
         const created = fetchSpy.mock.calls.map(([url]) => url.toString()).filter((u) => u.endsWith("/v1/runs"));
-        expect(created).toEqual(["http://default.test/v1/runs"]);
-        expect(authHeaderFor(fetchSpy, "http://default.test")).toBe("Bearer default-key");
+        expect(created).toEqual(["http://default.test/p/shared-bot/v1/runs"]);
+        expect(authHeaderFor(fetchSpy, "http://default.test/p/shared-bot")).toBe("Bearer default-key");
       } finally {
         vi.unstubAllGlobals();
       }
