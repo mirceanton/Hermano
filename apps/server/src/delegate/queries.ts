@@ -43,7 +43,7 @@ export function getAlertTriggers(db: DbClient, alertId: number): AlertTriggerRow
 }
 
 export function getDelegationsForAlert(db: DbClient, alertId: number): DelegationRow[] {
-  return db.select().from(delegations).where(eq(delegations.alertId, alertId)).orderBy(delegations.delegatedAt).all();
+  return db.select().from(delegations).where(eq(delegations.alertId, alertId)).orderBy(delegations.delegatedAt, delegations.id).all();
 }
 
 export function getLatestDelegation(db: DbClient, alertId: number): DelegationRow | null {
@@ -52,7 +52,7 @@ export function getLatestDelegation(db: DbClient, alertId: number): DelegationRo
       .select()
       .from(delegations)
       .where(eq(delegations.alertId, alertId))
-      .orderBy(desc(delegations.delegatedAt))
+      .orderBy(desc(delegations.delegatedAt), desc(delegations.id))
       .limit(1)
       .get() ?? null
   );
@@ -195,7 +195,7 @@ export function listDelegations(db: DbClient, page: number): { data: DelegationL
     .select({ delegation: delegations, alert: alerts })
     .from(delegations)
     .innerJoin(alerts, eq(delegations.alertId, alerts.id))
-    .orderBy(desc(delegations.delegatedAt))
+    .orderBy(desc(delegations.delegatedAt), desc(delegations.id))
     .limit(DELEGATIONS_PAGE_SIZE)
     .offset((page - 1) * DELEGATIONS_PAGE_SIZE)
     .all();

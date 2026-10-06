@@ -100,7 +100,7 @@ function findMostRecentEpisode(tx: IngestTx, fingerprint: string): AlertRow | un
 }
 
 function getLatestDelegationTx(tx: IngestTx, alertId: number): DelegationRow | undefined {
-  return tx.select().from(delegations).where(eq(delegations.alertId, alertId)).orderBy(desc(delegations.delegatedAt)).limit(1).get();
+  return tx.select().from(delegations).where(eq(delegations.alertId, alertId)).orderBy(desc(delegations.delegatedAt), desc(delegations.id)).limit(1).get();
 }
 
 function applyFiring(

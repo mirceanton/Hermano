@@ -42,14 +42,14 @@ const createBodySchema = z
   .object({
     name: nameSchema,
     url: urlSchema.optional(),
-    apiKey: apiKeySchema.nullable(),
+    apiKey: apiKeySchema.optional(),
     useSharedConnection: z.boolean().optional(),
   })
   .refine(
     (data) => data.useSharedConnection || data.url != null,
     { message: "url is required unless useSharedConnection is true", path: ["url"] },
   );
-const updateBodySchema = z.object({ name: nameSchema.optional(), url: urlSchema.optional(), apiKey: apiKeySchema.nullable(), useSharedConnection: z.boolean().optional() });
+const updateBodySchema = z.object({ name: nameSchema.optional(), url: urlSchema.optional(), apiKey: apiKeySchema.optional(), useSharedConnection: z.boolean().optional() });
 
 export function registerProfileRoutes(app: FastifyInstance, db: DbClient): void {
   app.get("/api/profiles", async (): Promise<HermesProfile[]> => listProfiles(db).map(toApiProfile));
