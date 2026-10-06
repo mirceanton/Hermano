@@ -10,11 +10,11 @@ export function getProfile(db: DbClient, id: number): HermesProfileRow | null {
   return db.select().from(hermesProfiles).where(eq(hermesProfiles.id, id)).get() ?? null;
 }
 
-export function createProfile(db: DbClient, input: { name: string; url: string; apiKey: string | null }): HermesProfileRow {
+export function createProfile(db: DbClient, input: { name: string; url: string | null; apiKey: string | null; useSharedConnection?: boolean }): HermesProfileRow {
   const now = new Date();
   return db
     .insert(hermesProfiles)
-    .values({ ...input, createdAt: now, updatedAt: now })
+    .values({ ...input, useSharedConnection: input.useSharedConnection ?? false, createdAt: now, updatedAt: now })
     .returning()
     .get();
 }
@@ -22,7 +22,7 @@ export function createProfile(db: DbClient, input: { name: string; url: string; 
 export function updateProfile(
   db: DbClient,
   id: number,
-  patch: { name?: string | undefined; url?: string | undefined; apiKey?: string | null | undefined },
+  patch: { name?: string | undefined; url?: string | null | undefined; apiKey?: string | null | undefined; useSharedConnection?: boolean | undefined },
 ): HermesProfileRow | null {
   const rows = db
     .update(hermesProfiles)

@@ -22,14 +22,19 @@ export interface HermesProfile {
   url: string;
   /** Never the actual key — just whether one is configured for this profile. */
   apiKeySet: boolean;
+  /** Whether this profile inherits its url/apiKey from the global Hermes Agent setting rather than storing its own. */
+  useSharedConnection: boolean;
   createdAt: number;
   updatedAt: number;
 }
 
 export interface HermesProfileCreateInput {
   name: string;
-  url: string;
+  /** Required unless useSharedConnection is true, in which case the global Hermes Agent URL is used. */
+  url?: string;
   apiKey?: string | null;
+  /** When true, url and apiKey are inherited from the global Hermes Agent setting — no per-profile values are stored. Defaults to false. */
+  useSharedConnection?: boolean;
 }
 
 export interface HermesProfileUpdateInput {
@@ -37,6 +42,8 @@ export interface HermesProfileUpdateInput {
   url?: string;
   /** A new key to store, or null to clear the stored one. Omit to keep it as is. */
   apiKey?: string | null;
+  /** Set to true to inherit the global Hermes Agent connection; set to false to switch back to per-profile url/apiKey. Omit to keep as is. */
+  useSharedConnection?: boolean;
 }
 
 export interface AlertTrigger {
