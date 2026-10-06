@@ -83,7 +83,8 @@ function clientForDelegation(
     // without duplicating credentials.
     if (profile.useSharedConnection) {
       const hermes = effectiveHermesConfig(config, settings);
-      return new HermesClient({ baseUrl: hermes.baseUrl, apiKey: hermes.apiKey ?? undefined });
+      const baseUrl = hermes.baseUrl ? `${hermes.baseUrl.replace(/\/+$/, "")}/p/${encodeURIComponent(profile.name)}` : "";
+      return new HermesClient({ baseUrl, apiKey: hermes.apiKey ?? undefined });
     }
     return new HermesClient({ baseUrl: profile.url ?? "", apiKey: profile.apiKey ?? undefined });
   }
