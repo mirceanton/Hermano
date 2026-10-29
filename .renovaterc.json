@@ -1,4 +1,15 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>mirceanton/renovate-config//default.json5"]
+    "extends": ["github>mirceanton/renovate-config//default.json5"],
+    "packageRules": [
+        {
+            "description": "pnpm is pinned in package.json's `packageManager` field (the single source of truth mise and the Dockerfile both read), so a bump there must refresh mise.lock exactly like a mise tool bump does - otherwise the lockfile silently pins the previous pnpm.",
+            "matchDepTypes": ["packageManager"],
+            "postUpgradeTasks": {
+                "commands": ["mise lock"],
+                "fileFilters": ["mise.lock"],
+                "executionMode": "branch"
+            }
+        }
+    ]
 }

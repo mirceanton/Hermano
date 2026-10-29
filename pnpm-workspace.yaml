@@ -4,3 +4,10 @@ packages:
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+# pnpm does not manage its own version here: mise resolves it from the
+# package.json `packageManager` field, which is also what the Dockerfile
+# installs from. `ignore` is pnpm's documented setting for exactly that case
+# ("version management is handled by an external tool such as mise"), and it
+# keeps pnpm from rewriting pnpm-lock.yaml with a packageManagerDependencies
+# document on every install.
+pmOnFail: ignore

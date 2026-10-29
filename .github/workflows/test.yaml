@@ -16,6 +16,36 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup mise
         uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+      # CI must test the toolchain we actually ship, not an older one. The
+      # resolved versions are always printed so the run log proves what the
+      # tests ran on, and the job fails if the Node line from .mise.toml
+      # diverges from the image's NODE_IMAGE, if pnpm is not the version
+      # package.json pins, or if a second pnpm pin reappears in .mise.toml.
+      - name: Verify toolchain matches the shipped runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_version="$(mise exec -- node --version)"
+          pnpm_version="$(mise exec -- pnpm --version)"
+          pnpm_declared="$(mise exec -- node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')"
+          image_node_major="$(grep -oE 'NODE_IMAGE=node:[0-9]+' Dockerfile | head -1 | cut -d: -f2)"
+          echo "node: CI ${node_version} / image node:${image_node_major}-slim"
+          echo "pnpm: CI ${pnpm_version} / package.json packageManager ${pnpm_declared}"
+          case "${node_version}" in
+            v"${image_node_major}".*) ;;
+            *)
+              echo "::error::CI runs ${node_version} but the image builds on node:${image_node_major}-slim"
+              exit 1
+              ;;
+          esac
+          if [ "${pnpm_version}" != "${pnpm_declared}" ]; then
+            echo "::error::CI runs pnpm ${pnpm_version} but package.json pins ${pnpm_declared}"
+            exit 1
+          fi
+          if grep -qE '^"?[a-z]+:pnpm/pnpm"?' .mise.toml; then
+            echo "::error::.mise.toml pins pnpm separately; package.json packageManager is the only pin"
+            exit 1
+          fi
       - name: Install dependencies
         run: mise exec -- pnpm install --frozen-lockfile
       - name: Build shared package
