@@ -12,7 +12,11 @@ FROM ${NODE_IMAGE} AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+# Corepack is no longer shipped with Node.js >= 25 (removed from the
+# distribution in the Node 25 line), so pin the package manager explicitly
+# instead of relying on corepack. Keep PNPM_VERSION in sync with mise.toml.
+ARG PNPM_VERSION=12.8.2
+RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /app
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
