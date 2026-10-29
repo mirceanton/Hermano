@@ -12,14 +12,21 @@ FROM ${NODE_IMAGE} AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/*
-# Corepack is no longer shipped with Node.js >= 25 (removed from the
-# distribution in the Node 25 line), so pin the package manager explicitly
-# instead of relying on corepack. Keep PNPM_VERSION in sync with mise.toml.
-ARG PNPM_VERSION=12.8.2
-RUN npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /app
 
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+# Corepack is no longer shipped with Node.js >= 25 (removed from the
+# distribution in the Node 25 line), so the package manager is installed
+# explicitly. Its version is read from the root package.json `packageManager`
+# field rather than repeated here as a second ARG: that field is the single
+# source of truth for pnpm (mise reads the same field for CI and local dev), so
+# the pnpm that builds this image cannot drift from the pnpm CI tests with.
+# The Corepack-style `+sha...` suffix Renovate may append is stripped; pnpm
+# itself validates the pin at runtime.
+COPY package.json ./
+RUN npm install -g "pnpm@$(node -p 'require("./package.json").packageManager.split("@")[1].split("+")[0]')" \
+    && pnpm --version
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json

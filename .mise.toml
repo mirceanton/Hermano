@@ -1,6 +1,12 @@
 [tools]
-node = "24.22.1"
-"aqua:pnpm/pnpm" = "12.15.0"
+node = "26.13.0"
 
 # CI Tools
 "aqua:rhysd/actionlint" = "1"
+
+# pnpm is deliberately NOT pinned as a tool: its version comes from the root
+# package.json `packageManager` field, the single source of truth shared with
+# the Dockerfile. Enabling the idiomatic version file makes mise resolve pnpm
+# from that field instead of a second, separately-drifting pin.
+[settings]
+idiomatic_version_file_enable_tools = ["pnpm"]
