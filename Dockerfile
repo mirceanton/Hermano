@@ -6,7 +6,7 @@
 # model-hub, hermano has no headless-browser/thumbnail-rendering requirement,
 # so a plain node:slim image is enough (no Playwright base needed), keeping
 # the final image dramatically smaller.
-ARG NODE_IMAGE=node:24-slim
+ARG NODE_IMAGE=node:26-slim
 
 FROM ${NODE_IMAGE} AS build
 RUN apt-get update \
